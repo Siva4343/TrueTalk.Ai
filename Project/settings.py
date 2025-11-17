@@ -42,6 +42,9 @@ INSTALLED_APPS = [
     'Metting',
     'rest_framework',
     'corsheaders',
+    'job',
+    'ChatLogic',
+    
 ]
 
 MIDDLEWARE = [
