@@ -8,6 +8,6 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("google/", GoogleAuthView.as_view()),
     path("send-otp/", SendOTP.as_view()),
-    path("verify-otp/", VerifyOTP.as_view()),
+    path("phone-otp/", VerifyOTP.as_view()),
 ]
 

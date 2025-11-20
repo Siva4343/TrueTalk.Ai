@@ -2,17 +2,15 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth.models import User
 from .models import OTP, PendingUser
-from .serializers import SignupSerializer, VerifyOTPSerializer, LoginSerializer
+from .serializers import SignupSerializer, VerifyEmailOTPSerializer, LoginSerializer
 import random
 from django.core.mail import send_mail
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.authtoken.models import Token
 from django.db import IntegrityError
 from .models import PhoneOTP
-from .serializers import PhoneSerializer, VerifyOTPSerializer
+from .serializers import PhoneSerializer, VerifyPhoneOTPSerializer
 from .utils import send_otp, verify_otp
 from django.conf import settings
 from google.oauth2 import id_token
@@ -37,7 +35,7 @@ class SignupView(APIView):
         email = data["email"].lower()
 
         # If a real user with this email exists, block signup
-        if User.objects.filter(username=email).exists():
+        if CustomUser.objects.filter(email=email).exists():
             return Response({"message": "User with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Hash password for safe storage until verification
@@ -107,7 +105,7 @@ class VerifyOTPView(APIView):
     Verify the OTP; on success create actual User and delete PendingUser.
     """
     def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
+        serializer = VerifyEmailOTPSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         data = serializer.validated_data
@@ -135,29 +133,43 @@ class VerifyOTPView(APIView):
 
         # Create actual user
         try:
-            user = User.objects.create(
+            user = CustomUser.objects.create_user(
                 username=email,
+                email=email,
                 first_name=pending.first_name,
                 last_name=pending.last_name,
-                email=email,
-                password=pending.password_hash  # already hashed
+                password=pending.password_hash,  # Note: already hashed, so we set it directly
+                login_provider="email"
             )
+            # Set the hashed password directly since it's already hashed
+            user.password = pending.password_hash
+            user.save()
         except IntegrityError:
             return Response({"message": "User already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Optionally, create token for immediate login
-        token, _ = Token.objects.get_or_create(user=user)
+        # Generate JWT tokens for immediate login
+        refresh = RefreshToken.for_user(user)
 
         # Clean up: delete pending user and used OTPs (optional)
         pending.delete()
         OTP.objects.filter(email=email).delete()
 
-        return Response({"message": "OTP verified. User created.", "token": token.key}, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "OTP verified. User created.",
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name
+            }
+        }, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
     """
-    Login with email & password. Returns Token on success.
+    Login with email & password. Returns JWT tokens on success.
     """
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -168,15 +180,26 @@ class LoginView(APIView):
         password = data["password"]
 
         try:
-            user = User.objects.get(username=email)
-        except User.DoesNotExist:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
             return Response({"message": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not user.check_password(password):
             return Response({"message": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST)
 
-        token, _ = Token.objects.get_or_create(user=user)
-        return Response({"token": token.key, "message": "Login successful."}, status=status.HTTP_200_OK)
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "message": "Login successful.",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name
+            }
+        }, status=status.HTTP_200_OK)
 
 
 
@@ -249,7 +272,7 @@ class VerifyOTP(APIView):
 
         try:
             obj = PhoneOTP.objects.get(phone=phone)
-        except:
+        except PhoneOTP.DoesNotExist:
             return Response({"message": "Phone not found"}, status=400)
 
         valid = verify_otp(phone, otp, obj.session_id)
