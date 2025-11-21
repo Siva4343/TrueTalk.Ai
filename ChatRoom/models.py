@@ -1,22 +1,25 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Message(models.Model):
     """
-    Simple chat message model.
-
-    For now we only store:
-    - author name
-    - text content
-    - created_at timestamp
+    Chat message model with sender and receiver for user-to-user messaging.
     """
 
-    author = models.CharField(max_length=100)
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="sent_messages"
+    )
+    receiver = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="received_messages", null=True, blank=True
+    )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["created_at"]
 
     def __str__(self) -> str:
-        return f"{self.author}: {self.text[:30]}"
+        receiver_name = self.receiver.username if self.receiver else "Everyone"
+        return f"{self.sender.username} -> {receiver_name}: {self.text[:30]}"

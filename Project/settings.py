@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'Login',
     'ChatRoom',
     'Metting',
@@ -79,6 +80,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'Project.wsgi.application'
+
+# Channels configuration
+ASGI_APPLICATION = 'Project.asgi.application'
+
+# In-memory channel layer (for development)
+# For production, use Redis: CHANNEL_LAYERS = {...}
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 
 # Database

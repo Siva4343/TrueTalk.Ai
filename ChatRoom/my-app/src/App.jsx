@@ -10,15 +10,27 @@ const accentColors = [
   "#3b82f6",
 ];
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/chat/messages/";
+const API_HOST =
+  import.meta.env.VITE_API_HOST ||
+  `${window.location.hostname}:${import.meta.env.VITE_API_PORT || "8000"}`;
+
+const API_PROTOCOL = window.location.protocol === "https:" ? "https" : "http";
+const API_BASE_URL = `${API_PROTOCOL}://${API_HOST}/api/chat/messages/`;
+
+const WS_PROTOCOL = window.location.protocol === "https:" ? "wss" : "ws";
+const WS_URL =
+  import.meta.env.VITE_WS_URL || `${WS_PROTOCOL}://${API_HOST}/ws/chat/`;
 
 function App() {
   const [nameInput, setNameInput] = useState("");
+  const [receiverInput, setReceiverInput] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [quickMeetLink, setQuickMeetLink] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
   const scrollAnchorRef = useRef(null);
+  const wsRef = useRef(null);
 
   // Load messages from backend on first render
   useEffect(() => {
@@ -29,7 +41,8 @@ function App() {
 
         const normalized = data.map((m) => ({
           id: m.id,
-          author: m.author,
+          author: m.sender_username || m.sender?.username || "Unknown",
+          receiver: m.receiver_username || m.receiver?.username || null,
           text: m.text,
           time: new Date(m.created_at).toLocaleTimeString([], {
             hour: "2-digit",
@@ -44,6 +57,65 @@ function App() {
     };
 
     fetchMessages();
+  }, []);
+
+  // WebSocket connection for real-time messaging
+  useEffect(() => {
+    const connectWebSocket = () => {
+      try {
+        const ws = new WebSocket(WS_URL);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log("WebSocket Connected");
+          setIsConnected(true);
+        };
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === "chat_message" && data.message) {
+            const msg = data.message;
+            const newMessage = {
+              id: msg.id,
+              author: msg.sender_username,
+              receiver: msg.receiver_username,
+              text: msg.text,
+              time: new Date(msg.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            };
+
+            setMessages((prev) => [...prev, newMessage]);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          setIsConnected(false);
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket Disconnected");
+          setIsConnected(false);
+          // Attempt to reconnect after 3 seconds
+          setTimeout(connectWebSocket, 3000);
+        };
+      } catch (error) {
+        console.error("Failed to connect WebSocket:", error);
+        setIsConnected(false);
+      }
+    };
+
+    connectWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
   }, []);
 
   const colorByAuthor = useMemo(() => {
@@ -70,12 +142,39 @@ function App() {
 
     setIsSending(true);
 
-    const payload = {
-      author: nameInput.trim(),
-      text: messageInput.trim(),
-    };
+    // Send via WebSocket for real-time delivery
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "chat_message",
+            sender_username: nameInput.trim(),
+            receiver_username: receiverInput.trim() || null,
+            message: messageInput.trim(),
+          })
+        );
+        resetInputs();
+      } catch (error) {
+        console.error("Failed to send via WebSocket:", error);
+        // Fallback to REST API
+        await sendViaAPI();
+      }
+    } else {
+      // Fallback to REST API if WebSocket not connected
+      await sendViaAPI();
+    }
 
+    setIsSending(false);
+  };
+
+  const sendViaAPI = async () => {
     try {
+      const payload = {
+        sender_username: nameInput.trim(),
+        receiver_username: receiverInput.trim() || null,
+        text: messageInput.trim(),
+      };
+
       const response = await fetch(API_BASE_URL, {
         method: "POST",
         headers: {
@@ -84,11 +183,16 @@ function App() {
         body: JSON.stringify(payload),
       });
 
+      if (!response.ok) {
+        throw new Error("Failed to send message");
+      }
+
       const saved = await response.json();
 
       const newMessage = {
         id: saved.id,
-        author: saved.author,
+        author: saved.sender_username || saved.sender?.username,
+        receiver: saved.receiver_username || saved.receiver?.username || null,
         text: saved.text,
         time: new Date(saved.created_at).toLocaleTimeString([], {
           hour: "2-digit",
@@ -101,8 +205,6 @@ function App() {
     } catch (error) {
       console.error("Failed to send message", error);
       alert("Failed to send message. Check backend is running.");
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -191,15 +293,26 @@ function App() {
         <main className="chat-body">
           <section className="composer-card">
             <form className="composer-form" onSubmit={handleSend}>
-              <label className="field">
-                <span className="field-label">Name</span>
-                <input
-                  type="text"
-                  placeholder="Enter your display name"
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                />
-              </label>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <label className="field" style={{ flex: 1 }}>
+                  <span className="field-label">Your Name</span>
+                  <input
+                    type="text"
+                    placeholder="Enter your display name"
+                    value={nameInput}
+                    onChange={(event) => setNameInput(event.target.value)}
+                  />
+                </label>
+                <label className="field" style={{ flex: 1 }}>
+                  <span className="field-label">Send To (optional - leave empty for group chat)</span>
+                  <input
+                    type="text"
+                    placeholder="Enter receiver username"
+                    value={receiverInput}
+                    onChange={(event) => setReceiverInput(event.target.value)}
+                  />
+                </label>
+              </div>
               <label className="field">
                 <span className="field-label">Message</span>
                 <textarea
@@ -209,6 +322,29 @@ function App() {
                   onChange={(event) => setMessageInput(event.target.value)}
                 />
               </label>
+              {isConnected ? (
+                <div style={{ 
+                  padding: "8px 12px", 
+                  background: "#d1fae5", 
+                  borderRadius: "8px", 
+                  fontSize: "0.85rem",
+                  color: "#065f46",
+                  fontWeight: 600
+                }}>
+                  ✓ Connected - Real-time messaging active
+                </div>
+              ) : (
+                <div style={{ 
+                  padding: "8px 12px", 
+                  background: "#fee2e2", 
+                  borderRadius: "8px", 
+                  fontSize: "0.85rem",
+                  color: "#991b1b",
+                  fontWeight: 600
+                }}>
+                  ⚠ Disconnected - Using REST API fallback
+                </div>
+              )}
               <div className="composer-footer">
                 <div className="typing-preview">
                   {messageInput
@@ -265,7 +401,19 @@ function App() {
                   </div>
                   <div className="message-content">
                     <div className="message-meta">
-                      <span className="message-author">{message.author}</span>
+                      <span className="message-author">
+                        {message.author}
+                        {message.receiver && (
+                          <span style={{ 
+                            marginLeft: "8px", 
+                            fontSize: "0.75rem", 
+                            color: "#6b7280",
+                            fontWeight: "normal"
+                          }}>
+                            → {message.receiver}
+                          </span>
+                        )}
+                      </span>
                       <span className="message-time">{message.time}</span>
                     </div>
                     <p className="message-text">{message.text}</p>
