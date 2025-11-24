@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     'job',
     'ChatLogic',
     'Business',
+    'contact',
+    "channels",
     
     # Add your contact app here
 ]
@@ -147,4 +149,14 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20
+}
+
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
 }
