@@ -10,9 +10,9 @@ const accentColors = [
   "#3b82f6",
 ];
 
+// Default to localhost:8000 for backend API
 const API_HOST =
-  import.meta.env.VITE_API_HOST ||
-  `${window.location.hostname}:${import.meta.env.VITE_API_PORT || "8000"}`;
+  import.meta.env.VITE_API_HOST || "127.0.0.1:8000";
 
 const API_PROTOCOL = window.location.protocol === "https:" ? "https" : "http";
 const API_BASE_URL = `${API_PROTOCOL}://${API_HOST}/api/chat/messages/`;
@@ -72,35 +72,55 @@ function App() {
         };
 
         ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === "chat_message" && data.message) {
-            const msg = data.message;
-            const newMessage = {
-              id: msg.id,
-              author: msg.sender_username,
-              receiver: msg.receiver_username,
-              text: msg.text,
-              time: new Date(msg.created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            };
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === "chat_message" && data.message) {
+              const msg = data.message;
+              const newMessage = {
+                id: msg.id,
+                author: msg.sender_username,
+                receiver: msg.receiver_username || null,
+                text: msg.text,
+                time: new Date(msg.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              };
 
-            setMessages((prev) => [...prev, newMessage]);
+              setMessages((prev) => {
+                // Avoid duplicates by checking if message ID already exists
+                if (prev.some(m => m.id === newMessage.id)) {
+                  return prev;
+                }
+                return [...prev, newMessage];
+              });
+            } else if (data.type === "error") {
+              console.error("WebSocket error:", data.message);
+              alert(`Error: ${data.message}`);
+            }
+          } catch (error) {
+            console.error("Failed to parse WebSocket message:", error);
           }
         };
 
         ws.onerror = (error) => {
           console.error("WebSocket error:", error);
           setIsConnected(false);
+          // Don't attempt to reconnect if we get an error immediately
+          // This usually means the server doesn't support WebSockets
         };
 
-        ws.onclose = () => {
-          console.log("WebSocket Disconnected");
+        ws.onclose = (event) => {
+          console.log("WebSocket Disconnected", event.code, event.reason);
           setIsConnected(false);
-          // Attempt to reconnect after 3 seconds
-          setTimeout(connectWebSocket, 3000);
+          // Only attempt to reconnect if it was a normal close or unexpected close
+          // Don't reconnect on 404 or connection refused errors
+          if (event.code !== 1006 && event.code !== 1002) {
+            setTimeout(connectWebSocket, 3000);
+          } else {
+            console.log("WebSocket connection failed - will use REST API fallback");
+          }
         };
       } catch (error) {
         console.error("Failed to connect WebSocket:", error);
@@ -142,29 +162,39 @@ function App() {
 
     setIsSending(true);
 
-    // Send via WebSocket for real-time delivery
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(
-          JSON.stringify({
+    try {
+      // Send via WebSocket for real-time delivery
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          const wsPayload = {
             type: "chat_message",
             sender_username: nameInput.trim(),
-            receiver_username: receiverInput.trim() || null,
             message: messageInput.trim(),
-          })
-        );
-        resetInputs();
-      } catch (error) {
-        console.error("Failed to send via WebSocket:", error);
-        // Fallback to REST API
+          };
+          
+          // Only include receiver_username if it's not empty
+          if (receiverInput.trim()) {
+            wsPayload.receiver_username = receiverInput.trim();
+          }
+          
+          wsRef.current.send(JSON.stringify(wsPayload));
+          resetInputs();
+          setIsSending(false);
+        } catch (error) {
+          console.error("Failed to send via WebSocket:", error);
+          // Fallback to REST API
+          await sendViaAPI();
+          setIsSending(false);
+        }
+      } else {
+        // Fallback to REST API if WebSocket not connected
         await sendViaAPI();
+        setIsSending(false);
       }
-    } else {
-      // Fallback to REST API if WebSocket not connected
-      await sendViaAPI();
+    } catch (error) {
+      console.error("Error in handleSend:", error);
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
   const sendViaAPI = async () => {
@@ -175,6 +205,11 @@ function App() {
         text: messageInput.trim(),
       };
 
+      // Remove receiver_username if it's empty
+      if (!payload.receiver_username) {
+        delete payload.receiver_username;
+      }
+
       const response = await fetch(API_BASE_URL, {
         method: "POST",
         headers: {
@@ -184,7 +219,9 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to send message");
+        const errorText = await response.text();
+        console.error("API Error Response:", errorText);
+        throw new Error(`Failed to send message: ${response.status} ${response.statusText}`);
       }
 
       const saved = await response.json();
@@ -204,7 +241,8 @@ function App() {
       resetInputs();
     } catch (error) {
       console.error("Failed to send message", error);
-      alert("Failed to send message. Check backend is running.");
+      alert(`Failed to send message: ${error.message}\n\nCheck:\n1. Backend is running on http://127.0.0.1:8000\n2. Check browser console for details`);
+      throw error; // Re-throw so handleSend can catch it
     }
   };
 
@@ -293,8 +331,8 @@ function App() {
         <main className="chat-body">
           <section className="composer-card">
             <form className="composer-form" onSubmit={handleSend}>
-              <div style={{ display: "flex", gap: "12px" }}>
-                <label className="field" style={{ flex: 1 }}>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <label className="field" style={{ flex: "1 1 200px", minWidth: "200px" }}>
                   <span className="field-label">Your Name</span>
                   <input
                     type="text"
@@ -303,11 +341,11 @@ function App() {
                     onChange={(event) => setNameInput(event.target.value)}
                   />
                 </label>
-                <label className="field" style={{ flex: 1 }}>
-                  <span className="field-label">Send To (optional - leave empty for group chat)</span>
+                <label className="field" style={{ flex: "1 1 200px", minWidth: "200px" }}>
+                  <span className="field-label">Send To <span style={{ fontSize: "0.8em", fontWeight: "normal", color: "#6b7280" }}>(optional)</span></span>
                   <input
                     type="text"
-                    placeholder="Enter receiver username"
+                    placeholder="Leave empty for group chat"
                     value={receiverInput}
                     onChange={(event) => setReceiverInput(event.target.value)}
                   />

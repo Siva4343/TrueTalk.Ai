@@ -26,33 +26,51 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # Receive message from WebSocket
     async def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message_type = text_data_json.get("type", "chat_message")
-        
-        if message_type == "chat_message":
-            sender_username = text_data_json.get("sender_username")
-            receiver_username = text_data_json.get("receiver_username")
-            message_text = text_data_json.get("message")
+        try:
+            text_data_json = json.loads(text_data)
+            message_type = text_data_json.get("type", "chat_message")
             
-            # Save message to database
-            message = await self.save_message(
-                sender_username, receiver_username, message_text
-            )
-            
-            # Send message to room group
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    "type": "chat_message",
-                    "message": {
-                        "id": message["id"],
-                        "sender_username": message["sender_username"],
-                        "receiver_username": message["receiver_username"],
-                        "text": message["text"],
-                        "created_at": message["created_at"],
+            if message_type == "chat_message":
+                sender_username = text_data_json.get("sender_username")
+                receiver_username = text_data_json.get("receiver_username")
+                message_text = text_data_json.get("message")
+                
+                if not sender_username or not message_text:
+                    await self.send(text_data=json.dumps({
+                        "type": "error",
+                        "message": "sender_username and message are required"
+                    }))
+                    return
+                
+                # Save message to database
+                message = await self.save_message(
+                    sender_username, receiver_username, message_text
+                )
+                
+                # Send message to room group
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "chat_message",
+                        "message": {
+                            "id": message["id"],
+                            "sender_username": message["sender_username"],
+                            "receiver_username": message["receiver_username"],
+                            "text": message["text"],
+                            "created_at": message["created_at"],
+                        }
                     }
-                }
-            )
+                )
+        except json.JSONDecodeError:
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": "Invalid JSON format"
+            }))
+        except Exception as e:
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": str(e)
+            }))
 
     # Receive message from room group
     async def chat_message(self, event):
@@ -66,16 +84,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_message(self, sender_username, receiver_username, text):
+        if not sender_username or not text:
+            raise ValueError("sender_username and message text are required")
+        
         sender, _ = User.objects.get_or_create(
-            username=sender_username,
-            defaults={"email": f"{sender_username}@example.com"}
+            username=sender_username.strip(),
+            defaults={"email": f"{sender_username.strip()}@example.com"}
         )
         
         receiver = None
-        if receiver_username:
+        if receiver_username and receiver_username.strip():
             receiver, _ = User.objects.get_or_create(
-                username=receiver_username,
-                defaults={"email": f"{receiver_username}@example.com"}
+                username=receiver_username.strip(),
+                defaults={"email": f"{receiver_username.strip()}@example.com"}
             )
         
         message = Message.objects.create(

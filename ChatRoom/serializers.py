@@ -14,7 +14,7 @@ class MessageSerializer(serializers.ModelSerializer):
     receiver = UserSerializer(read_only=True, allow_null=True)
 
     # Write-only helper fields to accept usernames from the client
-    sender_username = serializers.CharField(write_only=True, required=False)
+    sender_username = serializers.CharField(write_only=True, required=True)
     receiver_username = serializers.CharField(
         write_only=True, required=False, allow_null=True, allow_blank=True
     )
@@ -31,6 +31,36 @@ class MessageSerializer(serializers.ModelSerializer):
             "created_at",
             "is_read",
         ]
+
+    def create(self, validated_data):
+        """
+        Override create to handle sender_username and receiver_username.
+        Convert usernames to User objects before creating the Message.
+        """
+        from django.contrib.auth.models import User
+        
+        # Extract username fields
+        sender_username = validated_data.pop("sender_username")
+        receiver_username = validated_data.pop("receiver_username", None)
+        
+        # Get or create User objects
+        sender, _ = User.objects.get_or_create(
+            username=sender_username,
+            defaults={"email": f"{sender_username}@example.com"},
+        )
+        
+        receiver = None
+        if receiver_username and receiver_username.strip():
+            receiver, _ = User.objects.get_or_create(
+                username=receiver_username.strip(),
+                defaults={"email": f"{receiver_username.strip()}@example.com"},
+            )
+        
+        # Create message with User objects
+        validated_data["sender"] = sender
+        validated_data["receiver"] = receiver
+        
+        return super().create(validated_data)
 
     def to_representation(self, instance):
         """

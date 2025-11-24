@@ -113,6 +113,8 @@
   font-weight: 600;
   font-size: 0.9rem;
   color: #111827;
+  word-wrap: break-word;
+  line-height: 1.4;
 }
 
 .field input,
@@ -349,5 +351,14 @@
 
   .messages-scroll {
     max-height: 300px;
+  }
+
+  .composer-form > div {
+    flex-direction: column !important;
+  }
+
+  .composer-form .field {
+    min-width: 100% !important;
+    flex: 1 1 100% !important;
   }
 }
