@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'job',
     'ChatLogic',
     
+    
 ]
 
 MIDDLEWARE = [
