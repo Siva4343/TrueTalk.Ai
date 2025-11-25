@@ -1,46 +1,50 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
-from .models import Message
-from django.contrib.auth.models import User
+from channels.db import database_sync_to_async
+from .models import SharedContact
+
 
 class ChatConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.room = "contactroom"
-        await self.channel_layer.group_add(self.room, self.channel_name)
-        await self.accept()
 
-    async def disconnect(self, code):
-        await self.channel_layer.group_discard(self.room, self.channel_name)
+    async def connect(self):
+        # Accept WebSocket connection
+        await self.accept()
 
     async def receive(self, text_data):
         data = json.loads(text_data)
 
-        if data.get("type") == "text":
-            await self.handle_text_message(data)
-        else:
-            await self.handle_contact_message(data)
+        msg_type = data.get("type")
 
-    async def handle_text_message(self, data):
-        user = User.objects.get(username=data["sender"])
-        msg = Message.objects.create(sender=user, text=data["text"])
+        # ---- TEXT MESSAGE (optional if needed) ----
+        if msg_type == "text":
+            await self.send(text_data=json.dumps({
+                "type": "text",
+                "sender": data["sender"],
+                "text": data["text"]
+            }))
 
-        await self.channel_layer.group_send(
-            self.room,
-            {"type": "chat_message", "message": msg.to_json()}
+        # ---- CONTACT MESSAGE ----
+        if msg_type == "contact":
+            name = data["contact_name"]
+            phone = data["contact_phone"]
+            sender = data["sender"]
+
+            # Save into database SAFELY (sync → async wrapper)
+            await self.save_contact(sender, name, phone)
+
+            # Send message back to React
+            await self.send(text_data=json.dumps({
+                "type": "contact",
+                "sender": sender,
+                "contact_name": name,
+                "contact_phone": phone,
+            }))
+
+    # ---- DB Function wrapped for async ----
+    @database_sync_to_async
+    def save_contact(self, sender, name, phone):
+        return SharedContact.objects.create(
+            sender=sender,
+            name=name,
+            phone=phone
         )
-
-    async def handle_contact_message(self, data):
-        user = User.objects.get(username=data["sender"])
-        msg = Message.objects.create(
-            sender=user,
-            contact_name=data["contact_name"],
-            contact_phone=data["contact_phone"],
-        )
-
-        await self.channel_layer.group_send(
-            self.room,
-            {"type": "chat_message", "message": msg.to_json()}
-        )
-
-    async def chat_message(self, event):
-        await self.send(text_data=json.dumps(event["message"]))
