@@ -1,42 +1,49 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from .models import Poll, Choice, Vote
-from .serializers import PollSerializer, ChoiceSerializer, VoteSerializer
+from django.shortcuts import get_object_or_404
 
-class PollViewSet(viewsets.ModelViewSet):
+from .models import Poll, PollOption, Vote
+from .serializers import PollSerializer
+
+class PollCreateView(generics.CreateAPIView):
+    serializer_class = PollSerializer
+    permission_classes = [IsAuthenticated]  # Require login
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class PollListView(generics.ListAPIView):
     queryset = Poll.objects.all()
     serializer_class = PollSerializer
-    
-    @action(detail=True, methods=['post'])
-    def vote(self, request, pk=None):
-        poll = self.get_object()
-        choice_id = request.data.get('choice')
-        
-        try:
-            choice = Choice.objects.get(id=choice_id, poll=poll)
-            vote, created = Vote.objects.get_or_create(
-                poll=poll,
-                voted_by=request.user,
-                defaults={'choice': choice}
-            )
-            
-            if not created:
-                vote.choice = choice
-                vote.save()
-            
-            return Response({'status': 'vote recorded'})
-        except Choice.DoesNotExist:
-            return Response(
-                {'error': 'Invalid choice'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
-class ChoiceViewSet(viewsets.ModelViewSet):
-    queryset = Choice.objects.all()
-    serializer_class = ChoiceSerializer
 
-class VoteViewSet(viewsets.ModelViewSet):
-    queryset = Vote.objects.all()
-    serializer_class = VoteSerializer
+class PollDetailView(generics.RetrieveAPIView):
+    queryset = Poll.objects.all()
+    serializer_class = PollSerializer
+
+
+class PollVoteView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, poll_id):
+        poll = get_object_or_404(Poll, id=poll_id)
+        option_id = request.data.get("option_id")
+
+        option = get_object_or_404(PollOption, id=option_id, poll=poll)
+
+        if not poll.allow_multiple:
+            Vote.objects.filter(poll=poll, user=request.user).delete()
+
+        existing_vote = Vote.objects.filter(poll=poll, option=option, user=request.user).first()
+
+        if existing_vote:
+            existing_vote.delete()
+            return Response({"message": "Vote removed"})
+
+        Vote.objects.create(poll=poll, option=option, user=request.user)
+        return Response({"message": "Vote added"}, status=201)
+
+
   

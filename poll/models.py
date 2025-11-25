@@ -2,28 +2,29 @@ from django.db import models
 from django.contrib.auth.models import User
 
 class Poll(models.Model):
-    question = models.CharField(max_length=200)
+    question = models.CharField(max_length=255)
+    allow_multiple = models.BooleanField(default=False)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.question
 
-class Choice(models.Model):
-    poll = models.ForeignKey(Poll, related_name='choices', on_delete=models.CASCADE)
-    choice_text = models.CharField(max_length=200)
+
+class PollOption(models.Model):
+    poll = models.ForeignKey(Poll, related_name='options', on_delete=models.CASCADE)
+    text = models.CharField(max_length=255)
 
     def __str__(self):
-        return self.choice_text
+        return self.text
+
 
 class Vote(models.Model):
     poll = models.ForeignKey(Poll, on_delete=models.CASCADE)
-    choice = models.ForeignKey(Choice, related_name='votes', on_delete=models.CASCADE)
-    voted_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    voted_at = models.DateTimeField(auto_now_add=True)
+    option = models.ForeignKey(PollOption, related_name='votes', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('poll', 'voted_by')
+        unique_together = ('poll', 'option', 'user')
 
-    def __str__(self):
-        return f"{self.voted_by} -> {self.choice} ({self.poll})"
+
