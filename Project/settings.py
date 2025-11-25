@@ -39,13 +39,18 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'Login',
     'ChatRoom',
-    'Metting',
+    'Meeting',
+    'channels',
     'rest_framework',
     'corsheaders',
     'job',
     'ChatLogic',
     
 ]
+
+# CORS SETTINGS (for development purposes)
+CORS_ALLOW_ALL_ORIGINS = True
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -132,3 +137,19 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# CORS (development only)
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Channels
+ASGI_APPLICATION = 'Project.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
