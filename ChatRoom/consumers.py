@@ -7,8 +7,9 @@ from .models import Message
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # Join a general chat room (or user-specific room)
-        self.room_group_name = "chat_room"
+        # Get room name from URL route
+        self.room_name = self.scope['url_route']['kwargs'].get('room_name', 'general')
+        self.room_group_name = f"chat_{self.room_name}"
         
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -33,18 +34,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if message_type == "chat_message":
                 sender_username = text_data_json.get("sender_username")
                 receiver_username = text_data_json.get("receiver_username")
+                group_id = text_data_json.get("group_id")
                 message_text = text_data_json.get("message")
+                msg_type = text_data_json.get("msg_type", "text")
+                attachment_url = text_data_json.get("attachment_url")
                 
-                if not sender_username or not message_text:
+                if not sender_username:
                     await self.send(text_data=json.dumps({
                         "type": "error",
-                        "message": "sender_username and message are required"
+                        "message": "sender_username is required"
                     }))
                     return
                 
                 # Save message to database
                 message = await self.save_message(
-                    sender_username, receiver_username, message_text
+                    sender_username, receiver_username, group_id, message_text, msg_type, attachment_url
                 )
                 
                 # Send message to room group
@@ -56,7 +60,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             "id": message["id"],
                             "sender_username": message["sender_username"],
                             "receiver_username": message["receiver_username"],
+                            "group_id": message["group_id"],
                             "text": message["text"],
+                            "msg_type": message["msg_type"],
+                            "attachment_url": message["attachment_url"],
                             "created_at": message["created_at"],
                         }
                     }
@@ -83,9 +90,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def save_message(self, sender_username, receiver_username, text):
-        if not sender_username or not text:
-            raise ValueError("sender_username and message text are required")
+    def save_message(self, sender_username, receiver_username, group_id, text, msg_type, attachment_url):
+        from .models import Group
         
         sender, _ = User.objects.get_or_create(
             username=sender_username.strip(),
@@ -98,18 +104,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 username=receiver_username.strip(),
                 defaults={"email": f"{receiver_username.strip()}@example.com"}
             )
+            
+        group = None
+        if group_id:
+            try:
+                group = Group.objects.get(id=group_id)
+            except Group.DoesNotExist:
+                pass
         
         message = Message.objects.create(
             sender=sender,
             receiver=receiver,
-            text=text
+            group=group,
+            text=text,
+            msg_type=msg_type,
+            attachment_url=attachment_url
         )
         
         return {
             "id": message.id,
             "sender_username": message.sender.username,
             "receiver_username": message.receiver.username if message.receiver else None,
+            "group_id": message.group.id if message.group else None,
             "text": message.text,
+            "msg_type": message.msg_type,
+            "attachment_url": message.attachment_url,
             "created_at": message.created_at.isoformat(),
         }
 

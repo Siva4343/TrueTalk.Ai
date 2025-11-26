@@ -1,22 +1,24 @@
-from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import Message
-
-
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
         fields = ["id", "username"]
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ["id", "name", "members", "created_at"]
 
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
     receiver = UserSerializer(read_only=True, allow_null=True)
+    group = GroupSerializer(read_only=True, allow_null=True)
 
-    # Write-only helper fields to accept usernames from the client
+    # Write-only helper fields to accept usernames/group_ids from the client
     sender_username = serializers.CharField(write_only=True, required=True)
     receiver_username = serializers.CharField(
         write_only=True, required=False, allow_null=True, allow_blank=True
+    )
+    group_id = serializers.IntegerField(
+        write_only=True, required=False, allow_null=True
     )
 
     class Meta:
@@ -25,23 +27,28 @@ class MessageSerializer(serializers.ModelSerializer):
             "id",
             "sender",
             "receiver",
+            "group",
             "sender_username",
             "receiver_username",
+            "group_id",
             "text",
+            "msg_type",
+            "attachment_url",
             "created_at",
             "is_read",
         ]
 
     def create(self, validated_data):
         """
-        Override create to handle sender_username and receiver_username.
-        Convert usernames to User objects before creating the Message.
+        Override create to handle sender_username, receiver_username, and group_id.
+        Convert usernames/ids to objects before creating the Message.
         """
         from django.contrib.auth.models import User
         
-        # Extract username fields
+        # Extract fields
         sender_username = validated_data.pop("sender_username")
         receiver_username = validated_data.pop("receiver_username", None)
+        group_id = validated_data.pop("group_id", None)
         
         # Get or create User objects
         sender, _ = User.objects.get_or_create(
@@ -55,10 +62,18 @@ class MessageSerializer(serializers.ModelSerializer):
                 username=receiver_username.strip(),
                 defaults={"email": f"{receiver_username.strip()}@example.com"},
             )
+            
+        group = None
+        if group_id:
+            try:
+                group = Group.objects.get(id=group_id)
+            except Group.DoesNotExist:
+                pass
         
-        # Create message with User objects
+        # Create message with objects
         validated_data["sender"] = sender
         validated_data["receiver"] = receiver
+        validated_data["group"] = group
         
         return super().create(validated_data)
 
@@ -72,4 +87,5 @@ class MessageSerializer(serializers.ModelSerializer):
         data["receiver_username"] = (
             instance.receiver.username if instance.receiver else None
         )
+        data["group_name"] = instance.group.name if instance.group else None
         return data
