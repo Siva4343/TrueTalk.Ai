@@ -5,11 +5,31 @@ export default function LoginPage() {
     const [username, setUsername] = useState('');
     const navigate = useNavigate();
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
+        console.log('Login attempt with username:', username);
         if (username.trim()) {
-            localStorage.setItem('username', username.trim());
-            navigate('/chat');
+            try {
+                const response = await fetch('http://localhost:8000/api/chat/users/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username: username.trim() }),
+                });
+
+                if (response.ok) {
+                    console.log('User created/verified in backend');
+                    localStorage.setItem('username', username.trim());
+                    navigate('/chat');
+                } else {
+                    console.error('Failed to create user in backend');
+                }
+            } catch (error) {
+                console.error('Error connecting to backend:', error);
+            }
+        } else {
+            console.log('Username is empty');
         }
     };
 
