@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 export default function Sidebar({ onSelectChat, currentChat }) {
     const [users, setUsers] = useState([]);
     const [groups, setGroups] = useState([]);
+    const [messages, setMessages] = useState([]);
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
     const [selectedMembers, setSelectedMembers] = useState([]);
@@ -12,6 +13,11 @@ export default function Sidebar({ onSelectChat, currentChat }) {
     useEffect(() => {
         fetchUsers();
         fetchGroups();
+        fetchMessages();
+
+        // Poll for new messages every 3 seconds to keep sidebar updated
+        const interval = setInterval(fetchMessages, 3000);
+        return () => clearInterval(interval);
     }, []);
 
     const fetchUsers = async () => {
@@ -32,6 +38,44 @@ export default function Sidebar({ onSelectChat, currentChat }) {
         } catch (error) {
             console.error('Error fetching groups:', error);
         }
+    };
+
+    const fetchMessages = async () => {
+        try {
+            const response = await fetch('http://localhost:8000/api/chat/messages/');
+            const data = await response.json();
+            setMessages(data);
+        } catch (error) {
+            console.error('Error fetching messages:', error);
+        }
+    };
+
+    const getLastMessage = (type, id, username) => {
+        let chatMessages = [];
+        if (type === 'group') {
+            chatMessages = messages.filter(m => m.group_id === id);
+        } else {
+            chatMessages = messages.filter(m =>
+                (m.sender_username === currentUsername && m.receiver_username === username) ||
+                (m.sender_username === username && m.receiver_username === currentUsername)
+            );
+        }
+
+        if (chatMessages.length === 0) return null;
+
+        const lastMsg = chatMessages[chatMessages.length - 1];
+        let preview = lastMsg.text;
+
+        if (lastMsg.msg_type === 'image') preview = '📷 Photo';
+        else if (lastMsg.msg_type === 'video') preview = '🎥 Video';
+        else if (lastMsg.msg_type === 'file') preview = '📄 File';
+        else if (lastMsg.msg_type === 'location') preview = '📍 Location';
+
+        return {
+            text: preview,
+            time: new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isOwn: lastMsg.sender_username === currentUsername
+        };
     };
 
     const handleCreateGroup = async (e) => {
@@ -196,25 +240,38 @@ export default function Sidebar({ onSelectChat, currentChat }) {
                 {filteredUsers.length > 0 && (
                     <div className="p-2">
                         <h3 className="text-xs font-semibold text-gray-400 px-3 py-2">DIRECT MESSAGES</h3>
-                        {filteredUsers.map(user => (
-                            <div
-                                key={user.id}
-                                onClick={() => onSelectChat({ type: 'user', data: user })}
-                                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all mb-1 ${currentChat?.type === 'user' && currentChat?.data?.id === user.id
-                                    ? 'bg-gray-700'
-                                    : 'hover:bg-gray-700/50'
-                                    }`}
-                            >
-                                <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(user.username)} flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0`}>
-                                    {getInitials(user.username)}
+                        {filteredUsers.map(user => {
+                            const lastMsg = getLastMessage('user', user.id, user.username);
+                            return (
+                                <div
+                                    key={user.id}
+                                    onClick={() => onSelectChat({ type: 'user', data: user })}
+                                    className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all mb-1 ${currentChat?.type === 'user' && currentChat?.data?.id === user.id
+                                        ? 'bg-gray-700'
+                                        : 'hover:bg-gray-700/50'
+                                        }`}
+                                >
+                                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(user.username)} flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0`}>
+                                        {getInitials(user.username)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline">
+                                            <p className="font-medium text-white truncate">{user.username}</p>
+                                            {lastMsg && <span className="text-xs text-gray-500">{lastMsg.time}</span>}
+                                        </div>
+                                        <p className="text-sm text-gray-400 truncate">
+                                            {lastMsg ? (
+                                                <span>{lastMsg.isOwn ? 'You: ' : ''}{lastMsg.text}</span>
+                                            ) : (
+                                                'Click to chat'
+                                            )}
+                                        </p>
+                                    </div>
+                                    {/* Online Indicator - could be dynamic later */}
+                                    <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0 border-2 border-gray-800"></div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-white truncate">{user.username}</p>
-                                    <p className="text-sm text-gray-400 truncate">Click to chat</p>
-                                </div>
-                                <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
@@ -222,26 +279,38 @@ export default function Sidebar({ onSelectChat, currentChat }) {
                 {filteredGroups.length > 0 && (
                     <div className="p-2 border-t border-gray-700">
                         <h3 className="text-xs font-semibold text-gray-400 px-3 py-2">GROUPS</h3>
-                        {filteredGroups.map(group => (
-                            <div
-                                key={group.id}
-                                onClick={() => onSelectChat({ type: 'group', data: group })}
-                                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all mb-1 ${currentChat?.type === 'group' && currentChat?.data?.id === group.id
-                                    ? 'bg-gray-700'
-                                    : 'hover:bg-gray-700/50'
-                                    }`}
-                            >
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0">
-                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                                    </svg>
+                        {filteredGroups.map(group => {
+                            const lastMsg = getLastMessage('group', group.id);
+                            return (
+                                <div
+                                    key={group.id}
+                                    onClick={() => onSelectChat({ type: 'group', data: group })}
+                                    className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all mb-1 ${currentChat?.type === 'group' && currentChat?.data?.id === group.id
+                                        ? 'bg-gray-700'
+                                        : 'hover:bg-gray-700/50'
+                                        }`}
+                                >
+                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold shadow-md flex-shrink-0">
+                                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline">
+                                            <p className="font-medium text-white truncate">{group.name}</p>
+                                            {lastMsg && <span className="text-xs text-gray-500">{lastMsg.time}</span>}
+                                        </div>
+                                        <p className="text-sm text-gray-400 truncate">
+                                            {lastMsg ? (
+                                                <span>{lastMsg.isOwn ? 'You: ' : ''}{lastMsg.text}</span>
+                                            ) : (
+                                                `${group.members?.length || 0} members`
+                                            )}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-white truncate">{group.name}</p>
-                                    <p className="text-sm text-gray-400 truncate">{group.members?.length || 0} members</p>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 

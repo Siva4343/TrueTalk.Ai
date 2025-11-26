@@ -29,6 +29,19 @@ export default function ChatWindow({ chat }) {
             const data = JSON.parse(event.data);
             if (data.type === 'chat_message') {
                 setMessages(prev => [...prev, data.message]);
+
+                // If we receive a message in the current chat, mark it as read immediately
+                if (data.message.sender_username !== currentUsername) {
+                    websocket.send(JSON.stringify({
+                        type: 'read_receipt',
+                        message_id: data.message.id,
+                        reader_username: currentUsername
+                    }));
+                }
+            } else if (data.type === 'read_receipt') {
+                setMessages(prev => prev.map(msg =>
+                    msg.id === data.message_id ? { ...msg, is_read: true } : msg
+                ));
             }
         };
 
@@ -46,9 +59,36 @@ export default function ChatWindow({ chat }) {
         };
     }, [chat]);
 
+    // Helper for ticks
+    const StatusTicks = ({ isRead }) => (
+        <span className="ml-1 inline-flex">
+            {isRead ? (
+                <div className="flex text-blue-400">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+                    <svg className="w-3 h-3 -ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+                </div>
+            ) : (
+                <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+            )}
+        </span>
+    );
+
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+
+        // Mark unread messages as read when opening chat
+        if (ws && ws.readyState === WebSocket.OPEN && messages.length > 0) {
+            messages.forEach(msg => {
+                if (!msg.is_read && msg.sender_username !== currentUsername) {
+                    ws.send(JSON.stringify({
+                        type: 'read_receipt',
+                        message_id: msg.id,
+                        reader_username: currentUsername
+                    }));
+                }
+            });
+        }
+    }, [messages, ws]);
 
     const fetchMessages = async () => {
         try {
@@ -324,9 +364,12 @@ export default function ChatWindow({ chat }) {
                                             </a>
                                         )}
 
-                                        <p className={`text-xs mt-1 ${isOwn ? 'text-purple-200' : 'text-gray-400'}`}>
-                                            {formatTime(msg.created_at)}
-                                        </p>
+                                        <div className={`flex items-center justify-end space-x-1 mt-1`}>
+                                            <p className={`text-xs ${isOwn ? 'text-purple-200' : 'text-gray-400'}`}>
+                                                {formatTime(msg.created_at)}
+                                            </p>
+                                            {isOwn && <StatusTicks isRead={msg.is_read} />}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

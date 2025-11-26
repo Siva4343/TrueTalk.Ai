@@ -31,7 +31,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data_json = json.loads(text_data)
             message_type = text_data_json.get("type", "chat_message")
             
-            if message_type == "chat_message":
+            if message_type == "read_receipt":
+                message_id = text_data_json.get("message_id")
+                reader_username = text_data_json.get("reader_username")
+                
+                if message_id and reader_username:
+                    await self.mark_message_as_read(message_id)
+                    
+                    # Broadcast read receipt to room
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            "type": "read_receipt",
+                            "message_id": message_id,
+                            "reader_username": reader_username
+                        }
+                    )
+            
+            elif message_type == "chat_message":
                 sender_username = text_data_json.get("sender_username")
                 receiver_username = text_data_json.get("receiver_username")
                 group_id = text_data_json.get("group_id")
@@ -65,6 +82,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             "msg_type": message["msg_type"],
                             "attachment_url": message["attachment_url"],
                             "created_at": message["created_at"],
+                            "is_read": False
                         }
                     }
                 )
@@ -87,6 +105,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "type": "chat_message",
             "message": message
+        }))
+
+    # Receive read receipt from room group
+    async def read_receipt(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "read_receipt",
+            "message_id": event["message_id"],
+            "reader_username": event["reader_username"]
         }))
 
     @database_sync_to_async
@@ -130,5 +156,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "msg_type": message.msg_type,
             "attachment_url": message.attachment_url,
             "created_at": message.created_at.isoformat(),
+            "is_read": message.is_read
         }
+
+    @database_sync_to_async
+    def mark_message_as_read(self, message_id):
+        from .models import Message
+        try:
+            message = Message.objects.get(id=message_id)
+            message.is_read = True
+            message.save()
+        except Message.DoesNotExist:
+            pass
 
