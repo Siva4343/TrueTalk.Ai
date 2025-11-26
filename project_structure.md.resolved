@@ -1,0 +1,79 @@
+# TrueTalk.Ai Codebase Overview
+
+This document provides a detailed map of the project structure, explaining where key code resides and what each file does.
+
+## 📂 Project Root (`TrueTalk.Ai/`)
+This is the main container for your Django project.
+
+-   **[manage.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/manage.py)**: The command-line utility for Django. You use this to run the server (`runserver`), make migrations, and create superusers.
+-   **[db.sqlite3](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/db.sqlite3)**: The local database file where all your users, messages, and groups are stored.
+-   **`Project/`**: The main configuration folder for the Django project.
+    -   **[settings.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/Project/settings.py)**: Contains all global settings (installed apps, database config, `CHANNEL_LAYERS` for WebSockets).
+    -   **[asgi.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/Project/asgi.py)**: The entry point for the ASGI server (Daphne). This is **critical** for WebSockets to work. It routes traffic to HTTP or WebSocket consumers.
+    -   **[urls.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/urls.py)**: The main URL router. It directs incoming HTTP requests to the appropriate app (e.g., `ChatRoom`).
+
+---
+
+## 🐍 Backend App (`ChatRoom/`)
+This app handles the core chat functionality.
+
+### Key Files:
+-   **[models.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/models.py)**: Defines the database structure.
+    -   [User](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/my-app/src/components/Sidebar.jsx#23-32): (Imported from Django) Stores username/password.
+    -   [Group](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/models.py#5-15): Stores group names and members.
+    -   [Message](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/models.py#17-53): Stores text, sender, receiver, timestamp, and `is_read` status.
+-   **[views.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/views.py)**: Handles HTTP API requests (REST API).
+    -   [UserViewSet](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/views.py#19-33): Handles user creation and fetching user lists.
+    -   [MessageViewSet](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/views.py#9-12): Fetches message history.
+    -   [GroupViewSet](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/views.py#14-17): Handles group creation and listing.
+-   **[consumers.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/consumers.py)**: **The Heart of Real-Time Chat**.
+    -   [ChatConsumer](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/consumers.py#8-171): A WebSocket consumer that handles:
+        -   Connecting users to rooms.
+        -   Receiving messages from the frontend.
+        -   Saving messages to the database.
+        -   Broadcasting messages to other users in the room.
+        -   Handling **Read Receipts** ([read_receipt](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/consumers.py#111-117) event).
+-   **[routing.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/routing.py)**: Maps WebSocket URLs (e.g., `ws://.../chat/room/`) to the [ChatConsumer](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/consumers.py#8-171).
+-   **[serializers.py](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/serializers.py)**: Converts complex database objects (like [Message](file:///c:/Users/DELL/Documents/GitHub/TrueTalk.Ai/ChatRoom/models.py#17-53)) into JSON format for the API and WebSockets.
+
+---
+
+## ⚛️ Frontend App (`ChatRoom/my-app/`)
+This is the React application that runs in the browser.
+
+### Key Directories:
+-   **`src/`**: Source code folder.
+    -   **`main.jsx`**: The entry point. It sets up the React app and routing.
+    -   **`App.jsx`**: The main layout component. It handles the routing between Login and Chat pages.
+
+### 📄 Pages (`src/pages/`)
+-   **`LoginPage.jsx`**:
+    -   Simple form to enter a username.
+    -   Calls the backend API to create/get the user.
+    -   Saves the username to `localStorage`.
+-   **`ChatPage.jsx`**:
+    -   The main container for the chat interface.
+    -   Holds the state for the `currentChat` (who you are talking to).
+    -   Renders `Sidebar` and `ChatWindow`.
+
+### 🧩 Components (`src/components/`)
+-   **`Sidebar.jsx`**:
+    -   **Lists Users & Groups**: Fetches them from the API.
+    -   **Last Message Preview**: Polls the API to show the latest message and time.
+    -   **Group Creation**: Modal to create new groups.
+    -   **Logout**: Clears storage and refreshes.
+-   **`ChatWindow.jsx`**: **The Core Chat UI**.
+    -   **WebSocket Connection**: Connects to `ws://localhost:8000...` when a chat is selected.
+    -   **Message List**: Displays messages with bubbles (Purple for you, Grey for others).
+    -   **Input Area**: Text box, file attachment, and location sharing buttons.
+    -   **Read Receipts**: Sends `read_receipt` events when you view messages and displays Blue Ticks.
+
+---
+
+## 🔄 How It All Connects
+
+1.  **Login**: `LoginPage` -> API (`views.py`) -> Database (`models.py`).
+2.  **Select Chat**: `Sidebar` -> Sets `currentChat` state.
+3.  **Connect**: `ChatWindow` -> `ws://` -> `asgi.py` -> `routing.py` -> `ChatConsumer` (`consumers.py`).
+4.  **Send Message**: `ChatWindow` -> WebSocket -> `ChatConsumer` -> Database.
+5.  **Receive Message**: Database -> `ChatConsumer` -> WebSocket -> `ChatWindow` (Update UI).
