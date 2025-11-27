@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'ChatLogic',
     'videocall',
     
+
+    
 ]
 
 MIDDLEWARE = [
