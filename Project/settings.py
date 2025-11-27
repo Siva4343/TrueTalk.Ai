@@ -61,6 +61,7 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+
 ROOT_URLCONF = 'Project.urls'
 
 TEMPLATES = [
@@ -78,9 +79,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'Project.wsgi.application'
 
-# Channels configuration
 ASGI_APPLICATION = 'Project.asgi.application'
 
 # In-memory channel layer (for development)
