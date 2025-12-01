@@ -226,5 +226,8 @@ LOGGING = {
         },
     },
 }
+# Redirects after login and logout
+LOGIN_REDIRECT_URL = '/api/'
+LOGOUT_REDIRECT_URL = '/api-auth/login/'
 
 
