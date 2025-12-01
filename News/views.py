@@ -11,12 +11,20 @@ from .models import NewsArticle
 from .serializers import NewsArticleSerializer
 from .rss_feeds import RSS_FEEDS
 import requests
+import time
+from urllib.parse import urljoin, urlparse
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Fallback image - using the user-uploaded screenshot path
 FALLBACK_IMAGE = "/mnt/data/Screenshot (19).png"
+
+# Optional overrides: some publishers use non-standard or moved feed URLs.
+# You can add known-good alternate endpoints here for problem sources.
+FEED_OVERRIDES = {
+    "KrishiJagran": ["https://krishijagran.com/rss/"],  # add known-good URL
+}
 
 def extract_image(entry):
     """
@@ -69,10 +77,134 @@ class FetchNewsAPI(APIView):
             url = meta.get("url")
             category = meta.get("category", "General")
             try:
-                feed = feedparser.parse(url)
+                # Use a robust fetcher that tries multiple candidate URLs (fallbacks)
+                # and performs retries with a real User-Agent. This helps against
+                # sites that block non-browser clients, return HTML pages or moved feeds.
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/120.0.0.0 Safari/537.36 TrueTalkBot/1.0"
+                }
+
+                def generate_candidate_urls(u):
+                    # Generate sensible variations (http/https, feed/rss endpoints)
+                    candidates = []
+                    parsed = urlparse(u)
+                    base = f"{parsed.scheme}://{parsed.netloc}"
+                    path = parsed.path or ""
+
+                    # Start with the provided URL
+                    candidates.append(u)
+
+                    # Add http variant if original is https
+                    if parsed.scheme == "https":
+                        candidates.append(u.replace("https://", "http://", 1))
+
+                    # If path looks like a file, try /feed and /rss versions on the site root
+                    if not path.endswith('/') and not path.endswith('.xml'):
+                        candidates.append(base + path + '/rss')
+                        candidates.append(base + path + '/feed')
+                    # Generic feed endpoints at root
+                    candidates.append(base + '/feed/')
+                    candidates.append(base + '/rss')
+                    candidates.append(base + '/rss.xml')
+
+                    # Try replacing common segments
+                    if '/feed/' in u:
+                        candidates.append(u.replace('/feed/', '/rss/'))
+                    if '/rss/' in u:
+                        candidates.append(u.replace('/rss/', '/feed/'))
+
+                    # Deduplicate while preserving order
+                    seen = set()
+                    result = []
+                    for c in candidates:
+                        if c and c not in seen:
+                            seen.add(c)
+                            result.append(c)
+                    return result
+
+                def try_fetch_and_parse(u):
+                    max_retries = 2
+                    last_exc = None
+                    for attempt in range(max_retries + 1):
+                        try:
+                                resp = requests.get(u, headers=headers, timeout=10)
+                                # raise_for_status will convert 4xx/5xx to HTTPError
+                                resp.raise_for_status()
+                                feed = feedparser.parse(resp.content)
+                                # If the response is HTML (not an RSS/atom), look for
+                                # a <link rel="alternate" type="application/rss+xml"> tag
+                                # and try that URL as a fallback.
+                                if not getattr(feed, 'entries', None):
+                                    content_type = resp.headers.get('content-type', '').lower()
+                                    if 'html' in content_type or b'<html' in resp.content[:200].lower():
+                                        soup = BeautifulSoup(resp.content, 'html.parser')
+                                        link_tag = soup.find('link', attrs={'type': 'application/rss+xml'}) or soup.find('link', attrs={'type': 'application/atom+xml'})
+                                        if link_tag and link_tag.get('href'):
+                                            candidate_feed = urljoin(u, link_tag.get('href'))
+                                            # try fetching the discovered feed
+                                            try:
+                                                r2 = requests.get(candidate_feed, headers=headers, timeout=8)
+                                                r2.raise_for_status()
+                                                feed2 = feedparser.parse(r2.content)
+                                                if getattr(feed2, 'entries', None):
+                                                    return feed2, r2
+                                            except Exception:
+                                                # if this fails, fallthrough and let the caller continue
+                                                pass
+                                return feed, resp
+                        except requests.exceptions.HTTPError as he:
+                            # return the error so caller can report detailed message
+                            last_exc = he
+                            # don't retry for 4xx other than 429
+                            if getattr(he.response, 'status_code', 0) in (429, 503):
+                                # wait briefly and retry
+                                time.sleep(1 + attempt)
+                                continue
+                            break
+                        except Exception as e:
+                            last_exc = e
+                            time.sleep(1 + attempt)
+                            continue
+                    return None, last_exc
+
+                # Allow per-source overrides to be tried before generated candidates
+                candidate_urls = []
+                if source in FEED_OVERRIDES:
+                    candidate_urls.extend(FEED_OVERRIDES[source])
+                candidate_urls.extend(generate_candidate_urls(url))
+                feed = None
+                resp = None
+                debug_attempts = []
+
+                for candidate in candidate_urls:
+                    parsed_feed, parsed_resp = try_fetch_and_parse(candidate)
+                    debug_attempts.append((candidate, parsed_resp, parsed_feed))
+                    if parsed_feed and getattr(parsed_feed, 'entries', None):
+                        feed = parsed_feed
+                        resp = parsed_resp
+                        break
+
+                if not feed:
+                    # No candidate produced entries — include detailed debug info
+                    details = []
+                    for c, r, f in debug_attempts:
+                        if isinstance(r, requests.Response):
+                            snippet = r.content[:500].decode(errors='replace')
+                            details.append(f"{c} -> {r.status_code}: {snippet[:140]}")
+                        else:
+                            details.append(f"{c} -> exception: {r}")
+
+                    msg = f"no usable feed for {source} ({url}) — tried: " + "; ".join(details)
+                    logger.warning(msg)
+                    errors.append({source: msg})
+                    continue
+
+                # feed parsed — but still check for bozo
                 if getattr(feed, "bozo", False):
-                    # feed.bozo indicates parse issues; still proceed if entries exist
-                    logger.warning("Feed parse issue for %s (%s)", source, url)
+                    bozo_exc = getattr(feed, "bozo_exception", None)
+                    logger.warning("Feed parse issue for %s (%s) — %s", source, url, bozo_exc)
 
                 for entry in feed.entries:
                     title = entry.get("title", "") or "No title"
