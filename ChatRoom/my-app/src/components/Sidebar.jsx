@@ -24,7 +24,7 @@ export default function Sidebar({ onSelectChat, currentChat, onShowProfile }) {
 
     const fetchUsers = async () => {
         try {
-            const response = await fetch('http://localhost:8001/api/chat/users/');
+            const response = await fetch('http://localhost:8000/api/chat/users/');
             const data = await response.json();
             if (Array.isArray(data)) {
                 setUsers(data.filter(u => u.username !== currentUsername));
@@ -40,7 +40,7 @@ export default function Sidebar({ onSelectChat, currentChat, onShowProfile }) {
 
     const fetchGroups = async () => {
         try {
-            const response = await fetch('http://localhost:8001/api/chat/groups/');
+            const response = await fetch('http://localhost:8000/api/chat/groups/');
             const data = await response.json();
             if (Array.isArray(data)) {
                 setGroups(data);
@@ -52,7 +52,7 @@ export default function Sidebar({ onSelectChat, currentChat, onShowProfile }) {
 
     const fetchMessages = async () => {
         try {
-            const response = await fetch('http://localhost:8001/api/chat/messages/');
+            const response = await fetch('http://localhost:8000/api/chat/messages/');
             const data = await response.json();
             if (Array.isArray(data)) {
                 setMessages(data);
@@ -95,7 +95,7 @@ export default function Sidebar({ onSelectChat, currentChat, onShowProfile }) {
         if (!newGroupName.trim() || selectedMembers.length === 0) return;
 
         try {
-            const response = await fetch('http://localhost:8001/api/chat/groups/', {
+            const response = await fetch('http://localhost:8000/api/chat/groups/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -178,7 +178,7 @@ export default function Sidebar({ onSelectChat, currentChat, onShowProfile }) {
         if (!window.confirm('Are you sure you want to delete this chat?')) return;
 
         try {
-            let url = `http://localhost:8001/api/chat/messages/delete_conversation/?username=${currentUsername}`;
+            let url = `http://localhost:8000/api/chat/messages/delete_conversation/?username=${currentUsername}`;
             if (type === 'group') {
                 url += `&group_id=${id}`;
             } else {

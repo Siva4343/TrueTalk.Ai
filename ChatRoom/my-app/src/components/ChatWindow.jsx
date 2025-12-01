@@ -20,8 +20,10 @@ export default function ChatWindow({ chat }) {
             ? `group_${chat.data.id}`
             : `user_${[currentUsername, chat.data.username].sort().join('_')}`;
 
+        console.log('Connecting to WebSocket room:', roomName);
+
         // Connect to WebSocket
-        const websocket = new WebSocket(`ws://localhost:8001/ws/chat/${roomName}/`);
+        const websocket = new WebSocket(`ws://localhost:8000/ws/chat/${roomName}/`);
 
         websocket.onopen = () => {
             console.log('WebSocket connected');
@@ -49,6 +51,10 @@ export default function ChatWindow({ chat }) {
 
         websocket.onerror = (error) => {
             console.error('WebSocket error:', error);
+        };
+
+        websocket.onclose = (e) => {
+            console.log('WebSocket closed:', e.code, e.reason);
         };
 
         setWs(websocket);
@@ -94,7 +100,7 @@ export default function ChatWindow({ chat }) {
 
     const fetchMessages = async () => {
         try {
-            const response = await fetch('http://localhost:8001/api/chat/messages/');
+            const response = await fetch('http://localhost:8000/api/chat/messages/');
             const data = await response.json();
 
             // Filter messages for current chat
@@ -117,6 +123,7 @@ export default function ChatWindow({ chat }) {
 
     const sendMessage = (e) => {
         e.preventDefault();
+        console.log('sendMessage called', { newMessage, wsState: ws?.readyState });
         if (!newMessage.trim() || !ws) return;
 
         const messageData = {
@@ -145,7 +152,7 @@ export default function ChatWindow({ chat }) {
         formData.append('file', file);
 
         try {
-            const response = await fetch('http://localhost:8001/api/logic/upload/', {
+            const response = await fetch('http://localhost:8000/api/logic/upload/', {
                 method: 'POST',
                 body: formData
             });

@@ -11,7 +11,7 @@ export default function LoginPage() {
         console.log('Login attempt with username:', username);
         if (username.trim()) {
             try {
-                const response = await fetch('http://localhost:8001/api/chat/users/', {
+                const response = await fetch('http://localhost:8000/api/chat/users/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
