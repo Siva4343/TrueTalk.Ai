@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import ProfileSidebar from './ProfileSidebar';
 
 export default function ChatWindow({ chat }) {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [ws, setWs] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [showProfile, setShowProfile] = useState(false);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
     const imageInputRef = useRef(null);
@@ -19,7 +21,7 @@ export default function ChatWindow({ chat }) {
             : `user_${[currentUsername, chat.data.username].sort().join('_')}`;
 
         // Connect to WebSocket
-        const websocket = new WebSocket(`ws://localhost:8000/ws/chat/${roomName}/`);
+        const websocket = new WebSocket(`ws://localhost:8001/ws/chat/${roomName}/`);
 
         websocket.onopen = () => {
             console.log('WebSocket connected');
@@ -92,7 +94,7 @@ export default function ChatWindow({ chat }) {
 
     const fetchMessages = async () => {
         try {
-            const response = await fetch('http://localhost:8000/api/chat/messages/');
+            const response = await fetch('http://localhost:8001/api/chat/messages/');
             const data = await response.json();
 
             // Filter messages for current chat
@@ -143,7 +145,7 @@ export default function ChatWindow({ chat }) {
         formData.append('file', file);
 
         try {
-            const response = await fetch('http://localhost:8000/api/logic/upload/', {
+            const response = await fetch('http://localhost:8001/api/logic/upload/', {
                 method: 'POST',
                 body: formData
             });
@@ -205,13 +207,14 @@ export default function ChatWindow({ chat }) {
     };
 
     const getAvatarColor = (name) => {
+        // Solid colors instead of gradients
         const colors = [
-            'from-purple-500 to-pink-500',
-            'from-blue-500 to-cyan-500',
-            'from-green-500 to-emerald-500',
-            'from-orange-500 to-red-500',
-            'from-indigo-500 to-purple-500',
-            'from-pink-500 to-rose-500',
+            'bg-blue-600',
+            'bg-indigo-600',
+            'bg-sky-600',
+            'bg-teal-600',
+            'bg-cyan-600',
+            'bg-blue-700',
         ];
         const index = name.charCodeAt(0) % colors.length;
         return colors[index];
@@ -224,9 +227,9 @@ export default function ChatWindow({ chat }) {
 
     if (!chat) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-gray-900">
+            <div className="flex-1 flex items-center justify-center bg-black">
                 <div className="text-center">
-                    <div className="w-32 h-32 mx-auto mb-6 bg-gray-800 rounded-full flex items-center justify-center">
+                    <div className="w-32 h-32 mx-auto mb-6 bg-gray-900 rounded-full flex items-center justify-center">
                         <svg className="w-16 h-16 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
@@ -239,12 +242,24 @@ export default function ChatWindow({ chat }) {
     }
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-900 h-screen">
+        <div className="flex-1 flex flex-col bg-black h-screen relative">
+            {/* Profile Sidebar */}
+            {showProfile && chat.type === 'user' && (
+                <ProfileSidebar
+                    user={chat.data}
+                    messages={messages}
+                    onClose={() => setShowProfile(false)}
+                />
+            )}
+
             {/* Header */}
-            <div className="px-6 py-4 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+            <div
+                onClick={() => chat.type === 'user' && setShowProfile(true)}
+                className="px-6 py-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-800 transition-colors"
+            >
                 <div className="flex items-center space-x-4">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${chat.type === 'group'
-                        ? 'from-blue-500 to-cyan-500'
+                    <div className={`w-12 h-12 rounded-full ${chat.type === 'group'
+                        ? 'bg-blue-600'
                         : getAvatarColor(chat.data.username || chat.data.name)
                         } flex items-center justify-center text-white font-semibold shadow-lg`}>
                         {chat.type === 'group' ? (
@@ -264,13 +279,13 @@ export default function ChatWindow({ chat }) {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <button className="p-2 hover:bg-gray-700 rounded-full transition-colors">
-                        <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </button>
-                    <button className="p-2 hover:bg-gray-700 rounded-full transition-colors">
-                        <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                         </svg>
                     </button>
@@ -278,7 +293,7 @@ export default function ChatWindow({ chat }) {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAwIDEwIEwgNDAgMTAgTSAxMCAwIEwgMTAgNDAgTSAwIDIwIEwgNDAgMjAgTSAyMCAwIEwgMjAgNDAgTSAwIDMwIEwgNDAgMzAgTSAzMCAwIEwgMzAgNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAyKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] bg-gray-900">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black">
                 {messages.map((msg, idx) => {
                     const isOwn = msg.sender_username === currentUsername;
 
@@ -286,7 +301,7 @@ export default function ChatWindow({ chat }) {
                         <div key={idx} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
                             <div className={`flex items-end space-x-2 max-w-lg ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
                                 {!isOwn && (
-                                    <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getAvatarColor(msg.sender_username)} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
+                                    <div className={`w-8 h-8 rounded-full ${getAvatarColor(msg.sender_username)} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
                                         {getInitials(msg.sender_username)}
                                     </div>
                                 )}
@@ -297,7 +312,7 @@ export default function ChatWindow({ chat }) {
                                     )}
 
                                     <div className={`rounded-2xl px-4 py-2 shadow-lg ${isOwn
-                                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-sm'
+                                        ? 'bg-blue-600 text-white rounded-br-sm'
                                         : 'bg-gray-800 text-white rounded-bl-sm'
                                         }`}>
                                         {msg.msg_type === 'text' && (
@@ -365,7 +380,7 @@ export default function ChatWindow({ chat }) {
                                         )}
 
                                         <div className={`flex items-center justify-end space-x-1 mt-1`}>
-                                            <p className={`text-xs ${isOwn ? 'text-purple-200' : 'text-gray-400'}`}>
+                                            <p className={`text-xs ${isOwn ? 'text-blue-200' : 'text-gray-400'}`}>
                                                 {formatTime(msg.created_at)}
                                             </p>
                                             {isOwn && <StatusTicks isRead={msg.is_read} />}
@@ -380,7 +395,7 @@ export default function ChatWindow({ chat }) {
             </div>
 
             {/* Input Area */}
-            <div className="px-6 py-4 bg-gray-800 border-t border-gray-700">
+            <div className="px-6 py-4 bg-gray-900 border-t border-gray-800">
                 {uploading && (
                     <div className="mb-2 text-sm text-gray-400 flex items-center space-x-2">
                         <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -417,7 +432,7 @@ export default function ChatWindow({ chat }) {
                         <button
                             type="button"
                             onClick={() => imageInputRef.current?.click()}
-                            className="p-2 hover:bg-gray-700 rounded-full transition-colors text-gray-400 hover:text-purple-400"
+                            className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-blue-400"
                             disabled={uploading}
                             title="Send image/video"
                         >
@@ -429,7 +444,7 @@ export default function ChatWindow({ chat }) {
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-2 hover:bg-gray-700 rounded-full transition-colors text-gray-400 hover:text-purple-400"
+                            className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-blue-400"
                             disabled={uploading}
                             title="Send file"
                         >
@@ -441,7 +456,7 @@ export default function ChatWindow({ chat }) {
                         <button
                             type="button"
                             onClick={shareLocation}
-                            className="p-2 hover:bg-gray-700 rounded-full transition-colors text-gray-400 hover:text-purple-400"
+                            className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-blue-400"
                             title="Share location"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,13 +471,13 @@ export default function ChatWindow({ chat }) {
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         placeholder="Type a message..."
-                        className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-400"
+                        className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-500"
                     />
 
                     <button
                         type="submit"
                         disabled={!newMessage.trim()}
-                        className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 text-white rounded-full transition-all transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed shadow-lg"
+                        className="p-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white rounded-full transition-all transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed shadow-lg"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

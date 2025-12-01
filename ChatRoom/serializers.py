@@ -1,18 +1,20 @@
 from rest_framework import serializers
-from .models import Message, Group
 from django.contrib.auth.models import User
+from .models import Message, Group, UserProfile
 
 class UserSerializer(serializers.ModelSerializer):
+    phone_number = serializers.CharField(source='userprofile.phone_number', required=False, allow_blank=True)
+
     class Meta:
         model = User
-        fields = ["id", "username"]
-
+        fields = ['id', 'username', 'first_name', 'email', 'phone_number']
 
 class GroupSerializer(serializers.ModelSerializer):
+    members = UserSerializer(many=True, read_only=True)
+
     class Meta:
         model = Group
-        fields = ["id", "name", "members", "created_at"]
-
+        fields = ['id', 'name', 'members', 'created_at']
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
@@ -50,7 +52,6 @@ class MessageSerializer(serializers.ModelSerializer):
         Override create to handle sender_username, receiver_username, and group_id.
         Convert usernames/ids to objects before creating the Message.
         """
-        from django.contrib.auth.models import User
         
         # Extract fields
         sender_username = validated_data.pop("sender_username")
