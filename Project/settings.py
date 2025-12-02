@@ -31,6 +31,7 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'job',
     'ChatLogic',
     'video',
+    
     
     # Third party apps
     'rest_framework',
@@ -250,4 +252,9 @@ LOGGING = {
 LOGIN_REDIRECT_URL = '/api/'
 LOGOUT_REDIRECT_URL = '/api-auth/login/'
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
