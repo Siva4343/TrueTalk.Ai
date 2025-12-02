@@ -26,6 +26,11 @@ SECRET_KEY = 'django-insecure-bfsbi)7t^pfc4dx1vq%uxrxfkp#$3ik8y*59b5xy=$-x)#406z
 DEBUG = True
 
 ALLOWED_HOSTS = []
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': [],
+}
+
 
 
 # Application definition
@@ -41,9 +46,11 @@ INSTALLED_APPS = [
     'ChatRoom',
     'Metting',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'job',
     'ChatLogic',
+    'Leo',
     
 ]
 
@@ -95,20 +102,7 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+
 
 
 # Internationalization
