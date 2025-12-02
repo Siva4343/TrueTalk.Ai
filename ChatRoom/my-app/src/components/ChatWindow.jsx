@@ -46,6 +46,8 @@ export default function ChatWindow({ chat }) {
                 setMessages(prev => prev.map(msg =>
                     msg.id === data.message_id ? { ...msg, is_read: true } : msg
                 ));
+            } else if (data.type === 'delete_message') {
+                setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
             }
         };
 
@@ -141,6 +143,14 @@ export default function ChatWindow({ chat }) {
 
         ws.send(JSON.stringify(messageData));
         setNewMessage('');
+    };
+
+    const deleteMessage = (messageId) => {
+        if (!ws) return;
+        ws.send(JSON.stringify({
+            type: 'delete_message',
+            message_id: messageId
+        }));
     };
 
     const handleFileUpload = async (e, type) => {
@@ -318,7 +328,7 @@ export default function ChatWindow({ chat }) {
                                         <p className="text-xs text-gray-400 mb-1 ml-2">{msg.sender_username}</p>
                                     )}
 
-                                    <div className={`rounded-2xl px-4 py-2 shadow-lg ${isOwn
+                                    <div className={`rounded-2xl px-4 py-2 shadow-lg relative group ${isOwn
                                         ? 'bg-blue-600 text-white rounded-br-sm'
                                         : 'bg-gray-800 text-white rounded-bl-sm'
                                         }`}>
@@ -392,6 +402,17 @@ export default function ChatWindow({ chat }) {
                                             </p>
                                             {isOwn && <StatusTicks isRead={msg.is_read} />}
                                         </div>
+                                        {isOwn && (
+                                            <button
+                                                onClick={() => deleteMessage(msg.id)}
+                                                className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Delete message"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>

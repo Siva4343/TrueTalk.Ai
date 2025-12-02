@@ -48,6 +48,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         }
                     )
             
+            elif message_type == "delete_message":
+                message_id = text_data_json.get("message_id")
+                if message_id:
+                    # Delete from database
+                    deleted = await self.delete_message_db(message_id)
+                    if deleted:
+                        # Broadcast delete event to room
+                        await self.channel_layer.group_send(
+                            self.room_group_name,
+                            {
+                                "type": "chat_message_delete",
+                                "message_id": message_id
+                            }
+                        )
+            
             elif message_type == "chat_message":
                 sender_username = text_data_json.get("sender_username")
                 receiver_username = text_data_json.get("receiver_username")
@@ -105,6 +120,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "type": "chat_message",
             "message": message
+        }))
+
+    # Receive delete message from room group
+    async def chat_message_delete(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "delete_message",
+            "message_id": event["message_id"]
         }))
 
     # Receive read receipt from room group
@@ -168,4 +190,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             message.save()
         except Message.DoesNotExist:
             pass
+
+    @database_sync_to_async
+    def delete_message_db(self, message_id):
+        from .models import Message
+        try:
+            message = Message.objects.get(id=message_id)
+            message.delete()
+            return True
+        except Message.DoesNotExist:
+            return False
 

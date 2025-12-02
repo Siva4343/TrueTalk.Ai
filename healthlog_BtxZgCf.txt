@@ -1,0 +1,154 @@
+============================================
+ System Health Report - 2025-11-08 11:55:36
+============================================
+Date & Time: Sat Nov  8 11:55:36 IST 2025
+Uptime:
+CPU Load:
+1.11502233541428
+Memory Usage (MB):
+
+TotalVisibleMemorySize FreePhysicalMemory
+---------------------- ------------------
+               8190248            1975556
+
+
+Disk Usage:
+
+Name        Used         Free
+----        ----         ----
+C    82295230464 172807577600
+
+
+Top 5 Memory-Consuming Processes:
+
+Name                  Id        CPU        WS
+----                  --        ---        --
+chrome              6396   60.21875 396087296
+Memory Compression  3448            378499072
+msedgewebview2     14188 159.328125 313368576
+explorer           11988  159.15625 275394560
+MsMpEng             1120            273383424
+
+
+Service Status:
+Service nginx not found
+Service sshd not found
+--------------------------------------------
+
+============================================
+ System Health Report - 2025-11-10 10:16:49
+============================================
+Date & Time: Mon Nov 10 10:16:49 IST 2025
+Uptime:
+CPU Load:
+============================================
+ System Health Report - 2025-11-10 10:17:03
+============================================
+Date & Time: Mon Nov 10 10:17:03 IST 2025
+Uptime:
+CPU Load:
+16.1677958326196
+Memory Usage (MB):
+
+TotalVisibleMemorySize FreePhysicalMemory
+---------------------- ------------------
+               8190248            2105872
+
+
+Disk Usage:
+
+Name        Used         Free
+----        ----         ----
+C    79661998080 175439826944
+
+
+Top 5 Memory-Consuming Processes:
+
+Name                  Id       CPU        WS
+----                  --       ---        --
+msedgewebview2      8544 59.640625 442019840
+chrome              3512  22.90625 320356352
+explorer           10408 40.953125 296976384
+MsMpEng             1120           259567616
+Memory Compression  3448           227442688
+
+
+Service Status:
+Service nginx not found
+Service sshd not found
+--------------------------------------------
+
+============================================
+ System Health Report - 2025-11-10 10:18:03
+============================================
+Date & Time: Mon Nov 10 10:18:03 IST 2025
+Uptime:
+CPU Load:
+43.1156765191188
+Memory Usage (MB):
+
+TotalVisibleMemorySize FreePhysicalMemory
+---------------------- ------------------
+               8190248            1038668
+
+
+Disk Usage:
+
+Name        Used         Free
+----        ----         ----
+C    80342118400 174760689664
+
+
+Top 5 Memory-Consuming Processes:
+
+Name              Id       CPU        WS
+----              --       ---        --
+Code            5960 20.328125 618225664
+msedgewebview2  8544 59.796875 436232192
+Code           21456  12.34375 342372352
+chrome          3512   23.1875 297209856
+explorer       10408    47.375 282447872
+
+
+Service Status:
+Service nginx not found
+Service sshd not found
+--------------------------------------------
+
+============================================
+ System Health Report - 2025-11-10 10:23:41
+============================================
+Date & Time: Mon Nov 10 10:23:41 IST 2025
+Uptime:
+CPU Load:
+7.35893178650019
+Memory Usage (MB):
+
+TotalVisibleMemorySize FreePhysicalMemory
+---------------------- ------------------
+               8190248            1749076
+
+
+Disk Usage:
+
+Name        Used         Free
+----        ----         ----
+C    80331644928 174771163136
+
+
+Top 5 Memory-Consuming Processes:
+
+Name              Id       CPU        WS
+----              --       ---        --
+Code            5960   24.5625 532938752
+msedgewebview2  8544      89.5 439406592
+explorer       10408  71.28125 306331648
+chrome          3512 28.015625 265805824
+MsMpEng         1120           238526464
+
+
+Service Status:
+Service nginx not found
+Service sshd not found
+--------------------------------------------
+
