@@ -1,0 +1,8 @@
+Django==5.2.8
+channels==4.0.0
+google-cloud-translate==3.23.0
+google-auth==2.43.0
+google-api-core==2.28.1
+google-cloud-core==2.5.0
+grpcio==1.76.0
+googletrans==4.0.0-rc1
