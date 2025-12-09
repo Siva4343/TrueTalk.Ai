@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import ProfileSidebar from './ProfileSidebar';
+import CallModal from './CallModal';
+import ThemeSelector from './ThemeSelector';
+import GroupInfoModal from './GroupInfoModal';
+import ScheduleMeetingModal from './ScheduleMeetingModal';
 
 export default function ChatWindow({ chat }) {
     const [messages, setMessages] = useState([]);
@@ -7,6 +11,16 @@ export default function ChatWindow({ chat }) {
     const [ws, setWs] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
+    const [showThemeSelector, setShowThemeSelector] = useState(false);
+    const [showGroupInfo, setShowGroupInfo] = useState(false);
+    const [showScheduleMeeting, setShowScheduleMeeting] = useState(false);
+    const [currentTheme, setCurrentTheme] = useState(localStorage.getItem('chat_theme') || 'default');
+    const [callState, setCallState] = useState(null); // { status: 'incoming'|'outgoing'|'connected', otherUser: ... }
+    const [showMenu, setShowMenu] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
     const imageInputRef = useRef(null);
@@ -219,6 +233,109 @@ export default function ChatWindow({ chat }) {
         }
     };
 
+    const handleCall = (type) => {
+        setCallState({
+            status: 'outgoing',
+            type,
+            otherUser: chat.data
+        });
+
+        // Send offer signal
+        if (ws) {
+            ws.send(JSON.stringify({
+                type: 'call_offer',
+                call_type: type,
+                target_username: chat.data.username,
+                sender_username: currentUsername
+            }));
+        }
+    };
+
+    const handleThemeSelect = (themeId) => {
+        setCurrentTheme(themeId);
+        localStorage.setItem('chat_theme', themeId);
+        setShowThemeSelector(false);
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                const audioFile = new File([audioBlob], "voice_message.wav", { type: 'audio/wav' });
+
+                // Upload and send
+                const fakeEvent = { target: { files: [audioFile] } };
+                handleFileUpload(fakeEvent, 'audio'); // Treat as audio file
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    const handleAddMember = async (username) => {
+        try {
+            const response = await fetch(`http://localhost:8000/api/chat/groups/${chat.data.id}/add_member/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+
+            if (response.ok) {
+                // Refresh chat data if needed, or let the websocket handle it if we broadcast updates
+                // For now, just close modal or show success
+                alert('Member added successfully');
+            } else {
+                alert('Failed to add member');
+            }
+        } catch (error) {
+            console.error('Error adding member:', error);
+        }
+    };
+
+    const handleScheduleMeeting = (details) => {
+        // Send meeting invite as a message
+        const messageText = `📅 Meeting Scheduled: ${details.title}\nDate: ${details.date}\nTime: ${details.time}`;
+
+        if (ws) {
+            const messageData = {
+                type: 'chat_message',
+                sender_username: currentUsername,
+                message: messageText,
+                msg_type: 'text'
+            };
+
+            if (chat.type === 'group') {
+                messageData.group_id = chat.data.id;
+            } else {
+                messageData.receiver_username = chat.data.username;
+            }
+
+            ws.send(JSON.stringify(messageData));
+        }
+    };
+
     const getInitials = (name) => {
         return name.substring(0, 2).toUpperCase();
     };
@@ -296,21 +413,66 @@ export default function ChatWindow({ chat }) {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <button className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                    <button
+                        onClick={() => handleCall('audio')}
+                        className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+                        title="Audio Call"
+                    >
                         <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
                     </button>
-                    <button className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                    <button
+                        onClick={() => handleCall('video')}
+                        className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+                        title="Video Call"
+                    >
                         <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                     </button>
+
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+                        >
+                            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                            </svg>
+                        </button>
+
+                        {showMenu && (
+                            <div className="absolute right-0 top-10 w-48 bg-gray-900 rounded-lg shadow-xl border border-gray-800 z-50 overflow-hidden">
+                                {chat.type === 'user' ? (
+                                    <>
+                                        <button onClick={() => { setShowProfile(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">View Contact</button>
+                                        <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Media, Links & Docs</button>
+                                        <button onClick={() => { setShowThemeSelector(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Chat Theme</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => { setShowGroupInfo(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Group Info</button>
+                                        <button onClick={() => { setShowGroupInfo(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Add Members</button>
+                                        <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Group Media</button>
+                                        <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Search</button>
+                                        <button onClick={() => { setShowThemeSelector(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Chat Theme</button>
+                                        <button onClick={() => { setShowScheduleMeeting(true); setShowMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white">Schedule Meeting</button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black">
+            <div className={`flex-1 overflow-y-auto p-6 space-y-4 ${currentTheme === 'ocean' ? 'bg-slate-900' :
+                currentTheme === 'forest' ? 'bg-green-950' :
+                    currentTheme === 'sunset' ? 'bg-rose-950' :
+                        currentTheme === 'midnight' ? 'bg-indigo-950' :
+                            'bg-black'
+                }`}>
                 {messages.map((msg, idx) => {
                     const isOwn = msg.sender_username === currentUsername;
 
@@ -355,6 +517,17 @@ export default function ChatWindow({ chat }) {
                                                     className="rounded-lg max-w-sm mb-2"
                                                 />
                                                 {msg.text && <p className="text-sm">{msg.text}</p>}
+                                            </div>
+                                        )}
+
+                                        {msg.msg_type === 'audio' && (
+                                            <div className="flex items-center space-x-2 min-w-[200px]">
+                                                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
+                                                    </svg>
+                                                </div>
+                                                <audio src={msg.attachment_url} controls className="h-8 w-48" />
                                             </div>
                                         )}
 
@@ -492,6 +665,17 @@ export default function ChatWindow({ chat }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={isRecording ? stopRecording : startRecording}
+                            className={`p-2 hover:bg-gray-800 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-blue-400'}`}
+                            title="Voice Message"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                        </button>
                     </div>
 
                     <input
@@ -513,6 +697,47 @@ export default function ChatWindow({ chat }) {
                     </button>
                 </form>
             </div>
-        </div>
+
+
+            {/* Modals */}
+            {
+                showThemeSelector && (
+                    <ThemeSelector
+                        currentTheme={currentTheme}
+                        onSelect={handleThemeSelect}
+                        onClose={() => setShowThemeSelector(false)}
+                    />
+                )
+            }
+            {
+                callState && (
+                    <CallModal
+                        call={callState}
+                        onAccept={() => setCallState(prev => ({ ...prev, status: 'connected' }))}
+                        onReject={() => setCallState(null)}
+                        onEnd={() => setCallState(null)}
+                    />
+                )
+            }
+
+            {
+                showGroupInfo && chat.type === 'group' && (
+                    <GroupInfoModal
+                        group={chat.data}
+                        onClose={() => setShowGroupInfo(false)}
+                        onAddMember={handleAddMember}
+                    />
+                )
+            }
+
+            {
+                showScheduleMeeting && (
+                    <ScheduleMeetingModal
+                        onClose={() => setShowScheduleMeeting(false)}
+                        onSchedule={handleScheduleMeeting}
+                    />
+                )
+            }
+        </div >
     );
 }

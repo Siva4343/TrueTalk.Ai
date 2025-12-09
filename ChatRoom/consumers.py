@@ -62,6 +62,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
                                 "message_id": message_id
                             }
                         )
+
+            # WebRTC Signaling
+            elif message_type in ["call_offer", "call_answer", "ice_candidate"]:
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "webrtc_signal",
+                        "message": text_data_json
+                    }
+                )
             
             elif message_type == "chat_message":
                 sender_username = text_data_json.get("sender_username")
@@ -136,6 +146,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "message_id": event["message_id"],
             "reader_username": event["reader_username"]
         }))
+
+    # Receive WebRTC signal from room group
+    async def webrtc_signal(self, event):
+        await self.send(text_data=json.dumps(event["message"]))
 
     @database_sync_to_async
     def save_message(self, sender_username, receiver_username, group_id, text, msg_type, attachment_url):

@@ -8,6 +8,7 @@ class Group(models.Model):
     """
     name = models.CharField(max_length=255)
     members = models.ManyToManyField(User, related_name="chat_groups")
+    theme = models.CharField(max_length=50, default='default', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -21,6 +22,7 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    theme = models.CharField(max_length=50, default='default', blank=True)
 
     def __str__(self):
         return f"{self.user.username}'s Profile"

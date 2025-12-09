@@ -3,7 +3,12 @@ from django.contrib.auth.models import User
 from .models import Message, Group, UserProfile
 
 class UserSerializer(serializers.ModelSerializer):
-    phone_number = serializers.CharField(source='userprofile.phone_number', required=False, allow_blank=True)
+    phone_number = serializers.SerializerMethodField()
+
+    def get_phone_number(self, obj):
+        if hasattr(obj, 'profile'):
+            return obj.profile.phone_number
+        return None
 
     class Meta:
         model = User
