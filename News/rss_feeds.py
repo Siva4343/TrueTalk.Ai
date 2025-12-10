@@ -8,14 +8,14 @@ RSS_FEEDS = {
     },
 
     # Telugu
-    "Eenadu": {
-        "url": "https://www.eenadu.net/rss/home.xml",
+    "NTV-Telugu": {
+        "url": "https://www.ntvtelugu.com/rss",
         "category": "Telugu",
     },
 
     # Hindi
-    "Jagran": {
-        "url": "https://www.jagran.com/rss/news-national.xml",
+    "AmarUjala": {
+        "url": "https://www.amarujala.com/rss/india-news.xml",
         "category": "Hindi",
     },
 
@@ -26,22 +26,18 @@ RSS_FEEDS = {
     },
 
     # Sports
-    "IndiaToday-Sports": {
-        "url": "https://www.indiatoday.in/rss/1206571",  # India Today sports RSS (works as general)
+    "BBC-Sport": {
+        "url": "http://feeds.bbci.co.uk/sport/rss.xml",
         "category": "Sports",
     },
 
-    # Agriculture (3 feeds aggregated under same category)
-    "KrishiJagran": {
-        "url": "https://krishijagran.com/feed/",
-        "category": "Agriculture",
-    },
+    # Agriculture
     "AgriTimes": {
         "url": "https://agritimes.co.in/feed/",
         "category": "Agriculture",
     },
     "IndianExpress-Agri": {
-        "url": "https://indianexpress.com/section/india/feed/",  # Agriculture items may appear here
+        "url": "https://indianexpress.com/section/india/feed/",
         "category": "Agriculture",
     },
 
@@ -55,5 +51,45 @@ RSS_FEEDS = {
     "TimesOfIndia": {
         "url": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
         "category": "India",
-    }
+    },
+
+    # Stock Market (Global - 100% Free)
+    "CNBC-World": {
+        "url": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+        "category": "Stock Market",
+    },
+    "Investing-com": {
+        "url": "https://www.investing.com/rss/news.rss",
+        "category": "Stock Market",
+    },
+    "ET-Markets": {
+        "url": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+        "category": "Stock Market",
+    },
+
+    # Technology (Global)
+    "TechCrunch": {
+        "url": "https://feeds.feedburner.com/TechCrunch/",
+        "category": "Technology",
+    },
+    "TheVerge": {
+        "url": "https://www.theverge.com/rss/index.xml",
+        "category": "Technology",
+    },
+
+    # Agriculture Business (Agribusiness News)
+    "RuralVoice-Agribusiness": {
+        "url": "https://eng.ruralvoice.in/rss/category/agribusiness",
+        "category": "Agriculture Business",
+    },
+
+    # Commodities (Gold, Silver, Commodity Prices)
+    "Livemint-Money": {
+        "url": "https://www.livemint.com/rss/money",
+        "category": "Commodities",
+    },
+    "ET-Commodities": {
+        "url": "https://economictimes.indiatimes.com/commodities/rssfeeds/1808152121.cms",
+        "category": "Commodities",
+    },
 }
