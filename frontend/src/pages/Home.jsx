@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { meetingAPI } from '../services/api';
 import { Video } from 'lucide-react';
 
 export default function Home() {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Send } from 'lucide-react';
 
-export default function ChatSidebar({ messages, onSendMessage, onClose, currentUserId, userName }) {
+export default function ChatSidebar({ messages, onSendMessage, onClose, currentUserId }) {
     const [input, setInput] = useState('');
 
     const handleSend = (e) => {

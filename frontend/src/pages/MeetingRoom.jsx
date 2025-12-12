@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
@@ -6,12 +6,23 @@ import VideoGrid from '../components/VideoGrid';
 import ControlBar from '../components/ControlBar';
 import ChatSidebar from '../components/ChatSidebar';
 import PreJoinScreen from '../components/PreJoinScreen';
-import { Users, Wifi, WifiOff, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal } from 'lucide-react';
+import { Users, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal } from 'lucide-react';
+
+// Simple counter for user IDs (defined outside component to persist)
+let userIdCounter = 0;
+
+// Generate a simple user ID without impure functions
+const generateUserId = () => {
+    return `user_${++userIdCounter}`;
+};
 
 export default function MeetingRoom() {
     const { meetingId } = useParams();
     const navigate = useNavigate();
-    const [userId] = useState(`user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+    
+    // Use useState with lazy initializer to avoid impure render
+    const [userId] = useState(() => generateUserId());
+    
     const [userName, setUserName] = useState('');
     const [hasJoined, setHasJoined] = useState(false);
     const [localStream, setLocalStream] = useState(null);
@@ -26,10 +37,29 @@ export default function MeetingRoom() {
     const [participants, setParticipants] = useState([]);
     const [copied, setCopied] = useState(false);
     const [reactions, setReactions] = useState([]);
+    const [reactionPositions, setReactionPositions] = useState({});
 
     const { isConnected, sendMessage, on } = useWebSocket(meetingId, userId, userName);
     const { remoteStreams, handleUserJoined, handleOffer, handleAnswer, handleICECandidate } =
         useWebRTC(localStream, sendMessage, userId);
+
+    const showReaction = useCallback((emoji, fromUserId) => {
+        // Use performance.now() which is allowed in callbacks
+        const id = performance.now();
+        const position = Math.random() * 80 + 10;
+        
+        setReactions(prev => [...prev, { id, emoji, userId: fromUserId }]);
+        setReactionPositions(prev => ({ ...prev, [id]: position }));
+        
+        setTimeout(() => {
+            setReactions(prev => prev.filter(r => r.id !== id));
+            setReactionPositions(prev => {
+                const newPositions = { ...prev };
+                delete newPositions[id];
+                return newPositions;
+            });
+        }, 3000);
+    }, []);
 
     useEffect(() => {
         if (!isConnected || !hasJoined) return;
@@ -57,7 +87,7 @@ export default function MeetingRoom() {
         on('reaction', (data) => {
             showReaction(data.emoji, data.userId);
         });
-    }, [isConnected, hasJoined, on, handleUserJoined, handleOffer, handleAnswer, handleICECandidate]);
+    }, [isConnected, hasJoined, on, handleUserJoined, handleOffer, handleAnswer, handleICECandidate, showReaction]);
 
     const handlePreJoin = (name, stream, muted, videoOff) => {
         setUserName(name);
@@ -111,14 +141,6 @@ export default function MeetingRoom() {
         } catch (error) {
             console.error('Error sharing screen:', error);
         }
-    };
-
-    const showReaction = (emoji, fromUserId) => {
-        const id = Date.now();
-        setReactions(prev => [...prev, { id, emoji, userId: fromUserId }]);
-        setTimeout(() => {
-            setReactions(prev => prev.filter(r => r.id !== id));
-        }, 3000);
     };
 
     const handleSendMessage = (message) => {
@@ -306,7 +328,7 @@ export default function MeetingRoom() {
                         key={reaction.id}
                         className="absolute bottom-32 text-6xl animate-float-up"
                         style={{
-                            left: `${Math.random() * 80 + 10}%`,
+                            left: `${reactionPositions[reaction.id] || 50}%`,
                         }}
                     >
                         {reaction.emoji}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Video, VideoOff, Mic, MicOff, Settings, Sparkles } from 'lucide-react';
 
-export default function PreJoinScreen({ meetingId, onJoin }) {
+export default function PreJoinScreen({ onJoin }) {
     const [userName, setUserName] = useState('Guest User');
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
@@ -11,28 +11,42 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // Get media stream for preview
+        let isMounted = true;
+        let mediaStream = null;
+
         const getMedia = async () => {
             try {
-                const mediaStream = await navigator.mediaDevices.getUserMedia({
+                const newStream = await navigator.mediaDevices.getUserMedia({
                     video: true,
                     audio: true,
                 });
-                setStream(mediaStream);
-                if (videoRef.current) {
-                    videoRef.current.srcObject = mediaStream;
+                
+                if (isMounted) {
+                    mediaStream = newStream;
+                    setStream(newStream);
+                    
+                    // Set video source immediately
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = newStream;
+                    }
+                } else {
+                    // Clean up if component unmounted while getting media
+                    newStream.getTracks().forEach(track => track.stop());
                 }
             } catch (error) {
                 console.error('Error accessing media:', error);
-                alert('Please grant camera and microphone permissions');
+                if (isMounted) {
+                    alert('Please grant camera and microphone permissions');
+                }
             }
         };
 
         getMedia();
 
         return () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            isMounted = false;
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
             }
         };
     }, []);
