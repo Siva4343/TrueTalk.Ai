@@ -1,8 +1,23 @@
+// VideoGrid.jsx - updated
 import VideoTile from './VideoTile';
 
-export default function VideoGrid({ localStream, remoteStreams, isVideoOff, isMuted, userName, viewMode = 'grid' }) {
+export default function VideoGrid({ 
+    localStream, 
+    remoteStreams, 
+    isVideoOff, 
+    isMuted, 
+    userName, 
+    viewMode = 'grid' 
+}) {
     const allStreams = [
-        { id: 'local', stream: localStream, name: userName, isLocal: true, isMuted, isVideoOff },
+        { 
+            id: 'local', 
+            stream: localStream, 
+            name: userName, 
+            isLocal: true, 
+            isMuted, 
+            isVideoOff 
+        },
         ...Array.from(remoteStreams.entries()).map(([id, stream]) => ({
             id,
             stream,

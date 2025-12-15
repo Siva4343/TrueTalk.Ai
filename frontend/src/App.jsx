@@ -11,6 +11,8 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/create" element={<CreateMeeting />} />
         <Route path="/join" element={<JoinMeeting />} />
+        {/* ADD THIS LINE - This is what's missing! */}
+        <Route path="/join/:meetingId" element={<JoinMeeting />} />
         <Route path="/meeting/:meetingId" element={<MeetingRoom />} />
       </Routes>
     </BrowserRouter>

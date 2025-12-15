@@ -1,7 +1,7 @@
 import { Mic, MicOff, Video, VideoOff, MessageSquare, PhoneOff, Smile, Users, MoreHorizontal, Monitor, MonitorOff } from 'lucide-react';
 import { useState } from 'react';
 
-export default function ControlBar({
+function ControlBar({
     isMuted,
     isVideoOff,
     isScreenSharing,
@@ -31,37 +31,35 @@ export default function ControlBar({
         setShowReactions(false);
     };
 
-    // Handle video toggle with improved logic
-    const handleToggleVideo = async () => {
-        try {
-            onToggleVideo();
-        } catch (error) {
-            console.error('Error toggling video:', error);
-        }
-    };
-
     return (
         <div className="bg-[#292929] border-t border-[#3d3d3d] px-4 py-3">
             <div className="flex items-center justify-center gap-2">
-                {/* Mute Button */}
+                {/* Mute Button - SIMPLIFIED AND CORRECT */}
                 <button
                     onClick={onToggleMute}
                     className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isMuted
                         ? 'bg-[#c4314b] hover:bg-[#a92b40]'
                         : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
                         }`}
+                    title={isMuted ? 'Click to unmute' : 'Click to mute'}
                 >
+                    {/* Icon changes based on isMuted */}
                     {isMuted ? (
-                        <MicOff className="w-5 h-5 text-white" />
+                        <>
+                            <MicOff className="w-5 h-5 text-white" />
+                            <span className="text-xs text-white">Unmute</span>
+                        </>
                     ) : (
-                        <Mic className="w-5 h-5 text-white" />
+                        <>
+                            <Mic className="w-5 h-5 text-white" />
+                            <span className="text-xs text-white">Mute</span>
+                        </>
                     )}
-                    <span className="text-xs text-white">{isMuted ? 'Unmute' : 'Mute'}</span>
                 </button>
 
-                {/* Video Button - Updated to handle camera on/off properly */}
+                {/* Video Button */}
                 <button
-                    onClick={handleToggleVideo}
+                    onClick={onToggleVideo}
                     className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isVideoOff
                         ? 'bg-[#c4314b] hover:bg-[#a92b40]'
                         : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
@@ -167,3 +165,5 @@ export default function ControlBar({
         </div>
     );
 }
+
+export default ControlBar;

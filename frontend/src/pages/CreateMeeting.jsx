@@ -6,7 +6,7 @@ import { Video, ArrowLeft, Copy, Check, ExternalLink } from 'lucide-react';
 export default function CreateMeeting() {
     const [title, setTitle] = useState('Test Meeting');
     const [description, setDescription] = useState('');
-    const [maxParticipants, setMaxParticipants] = useState(50); // Changed default from 10 to 50
+    const [maxParticipants, setMaxParticipants] = useState(50);
     const [loading, setLoading] = useState(false);
     const [createdMeeting, setCreatedMeeting] = useState(null);
     const [copied, setCopied] = useState(false);
@@ -15,7 +15,6 @@ export default function CreateMeeting() {
     const handleCreateMeeting = async (e) => {
         e.preventDefault();
         
-        // Validate max participants
         if (maxParticipants < 50 || maxParticipants > 300) {
             alert('Max participants must be between 50 and 300');
             return;
@@ -42,9 +41,12 @@ export default function CreateMeeting() {
         }
     };
 
+    // FIXED: Generate join link instead of direct meeting link
     const getMeetingLink = () => {
         if (!createdMeeting) return '';
-        return `${window.location.origin}/meeting/${createdMeeting.id}`;
+        // Use the meeting_code if available, otherwise use id
+        const meetingIdentifier = createdMeeting.meeting_code || createdMeeting.id;
+        return `${window.location.origin}/join/${meetingIdentifier}`;
     };
 
     const copyMeetingLink = () => {
@@ -53,11 +55,12 @@ export default function CreateMeeting() {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    // FIXED: Go to join page first, not directly to meeting
     const joinMeeting = () => {
-        navigate(`/meeting/${createdMeeting.id}`);
+        const meetingIdentifier = createdMeeting.meeting_code || createdMeeting.id;
+        navigate(`/join/${meetingIdentifier}`);
     };
 
-    // If meeting is created, show success screen
     if (createdMeeting) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
@@ -91,7 +94,13 @@ export default function CreateMeeting() {
                             <div className="flex items-center">
                                 <span className="font-medium w-32">Meeting Code:</span>
                                 <code className="bg-white px-3 py-1 rounded border text-gray-800 font-mono">
-                                    {createdMeeting.meeting_code}
+                                    {createdMeeting.meeting_code || 'N/A'}
+                                </code>
+                            </div>
+                            <div className="flex items-center">
+                                <span className="font-medium w-32">Shareable Code:</span>
+                                <code className="bg-white px-3 py-1 rounded border text-gray-800 font-mono">
+                                    {createdMeeting.meeting_code || createdMeeting.id}
                                 </code>
                             </div>
                             <div className="flex items-center">
@@ -141,6 +150,9 @@ export default function CreateMeeting() {
                                 2. Send it to participants via email, chat, or any messaging app
                                 <br />
                                 3. They can click the link to join instantly!
+                                <br />
+                                <br />
+                                <strong>Alternative:</strong> Share just the code: <code className="bg-gray-100 px-2 py-1 rounded">{createdMeeting.meeting_code || createdMeeting.id}</code>
                             </p>
                         </div>
                     </div>
@@ -159,7 +171,7 @@ export default function CreateMeeting() {
                                 setCreatedMeeting(null);
                                 setTitle('Test Meeting');
                                 setDescription('');
-                                setMaxParticipants(50); // Changed from 10 to 50
+                                setMaxParticipants(50);
                             }}
                             className="px-6 py-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-all"
                         >
@@ -178,11 +190,10 @@ export default function CreateMeeting() {
         );
     }
 
-    // Create meeting form
+    // Create meeting form (remainder unchanged)
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-xl w-full">
-                {/* Back Button */}
                 <button
                     onClick={() => navigate('/')}
                     className="flex items-center text-gray-600 hover:text-gray-800 mb-6 transition-colors"
@@ -191,7 +202,6 @@ export default function CreateMeeting() {
                     Back to Home
                 </button>
 
-                {/* Header */}
                 <div className="flex items-center mb-6">
                     <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center mr-4">
                         <Video className="w-6 h-6 text-white" />
@@ -204,7 +214,6 @@ export default function CreateMeeting() {
                     </div>
                 </div>
 
-                {/* Info Box */}
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded">
                     <p className="text-sm text-gray-700">
                         <strong className="text-blue-700">Note:</strong> You must be logged in to create or join meetings.
@@ -215,14 +224,12 @@ export default function CreateMeeting() {
                     </p>
                 </div>
 
-                {/* Form */}
                 <form onSubmit={handleCreateMeeting} className="space-y-6">
                     <div className="bg-gray-50 rounded-lg p-6">
                         <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             📝 Create New Meeting
                         </h2>
 
-                        {/* Meeting Title */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Meeting Title
@@ -237,7 +244,6 @@ export default function CreateMeeting() {
                             />
                         </div>
 
-                        {/* Description */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Description (optional)
@@ -251,7 +257,6 @@ export default function CreateMeeting() {
                             />
                         </div>
 
-                        {/* Max Participants */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Max Participants
@@ -260,8 +265,8 @@ export default function CreateMeeting() {
                                 type="number"
                                 value={maxParticipants}
                                 onChange={(e) => setMaxParticipants(e.target.value)}
-                                min="50"    // Changed from "2" to "50"
-                                max="300"   // Changed from "50" to "300"
+                                min="50"
+                                max="300"
                                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-800 transition-all"
                             />
                             <div className="flex items-center justify-between mt-1">
@@ -274,7 +279,6 @@ export default function CreateMeeting() {
                             </div>
                         </div>
 
-                        {/* Create Button */}
                         <button
                             type="submit"
                             disabled={loading}

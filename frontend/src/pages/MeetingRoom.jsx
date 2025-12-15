@@ -1,3 +1,4 @@
+// MeetingRoom.jsx
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -6,7 +7,7 @@ import VideoGrid from '../components/VideoGrid';
 import ControlBar from '../components/ControlBar';
 import ChatSidebar from '../components/ChatSidebar';
 import PreJoinScreen from '../components/PreJoinScreen';
-import { Users, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal } from 'lucide-react';
+import { Users, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal, Volume2, VolumeX } from 'lucide-react';
 
 // Simple counter for user IDs (defined outside component to persist)
 let userIdCounter = 0;
@@ -20,14 +21,12 @@ export default function MeetingRoom() {
     const { meetingId } = useParams();
     const navigate = useNavigate();
     
-    // Use useState with lazy initializer to avoid impure render
     const [userId] = useState(() => generateUserId());
-    
     const [userName, setUserName] = useState('');
     const [hasJoined, setHasJoined] = useState(false);
     const [localStream, setLocalStream] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(true); // Camera off by default
+    const [isVideoOff, setIsVideoOff] = useState(true);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [screenStream, setScreenStream] = useState(null);
     const [showChat, setShowChat] = useState(false);
@@ -38,6 +37,11 @@ export default function MeetingRoom() {
     const [copied, setCopied] = useState(false);
     const [reactions, setReactions] = useState([]);
     const [reactionPositions, setReactionPositions] = useState({});
+    const [showMoreOptions, setShowMoreOptions] = useState(false);
+    const [debugMode, setDebugMode] = useState(false);
+
+    const moreOptionsRef = useRef(null);
+    const audioTrackRef = useRef(null);
 
     const { isConnected, sendMessage, on } = useWebSocket(meetingId, userId, userName);
     const { remoteStreams, handleUserJoined, handleOffer, handleAnswer, handleICECandidate } =
@@ -58,6 +62,42 @@ export default function MeetingRoom() {
                 return newPositions;
             });
         }, 3000);
+    }, []);
+
+    // Debug useEffect to track mute state
+    useEffect(() => {
+        console.log('🔊 DEBUG Mute State:', {
+            isMuted,
+            hasLocalStream: !!localStream,
+            audioTracks: localStream?.getAudioTracks()?.length || 0,
+            audioTrackEnabled: localStream?.getAudioTracks()[0]?.enabled,
+            audioTrackRef: audioTrackRef.current?.enabled
+        });
+    }, [isMuted, localStream]);
+
+    // Store audio track reference when localStream changes
+    useEffect(() => {
+        if (localStream) {
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                audioTrackRef.current = audioTracks[0];
+                console.log('🎵 Audio track stored in ref:', audioTrackRef.current?.enabled);
+            }
+        }
+    }, [localStream]);
+
+    // Close more options when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (moreOptionsRef.current && !moreOptionsRef.current.contains(event.target)) {
+                setShowMoreOptions(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
     }, []);
 
     useEffect(() => {
@@ -98,137 +138,157 @@ export default function MeetingRoom() {
                 screenStream.getTracks().forEach(track => track.stop());
             }
         };
-    }, []);
+    }, [localStream, screenStream]);
 
-    const handlePreJoin = (name, stream, muted, videoOff) => {
-        console.log('PreJoin - Received stream:', stream);
-        console.log('PreJoin - Stream tracks:', stream.getTracks().map(t => ({ 
-            kind: t.kind, 
-            enabled: t.enabled,
-            label: t.label 
-        })));
-        
+    const handlePreJoin = (name, stream) => {
         setUserName(name);
         setLocalStream(stream);
-        setIsMuted(muted);
-        setIsVideoOff(videoOff);
         setHasJoined(true);
-    };
-
-    const toggleMute = () => {
-        if (localStream) {
-            const audioTracks = localStream.getAudioTracks();
-            if (audioTracks.length > 0) {
-                audioTracks[0].enabled = !audioTracks[0].enabled;
-                setIsMuted(!audioTracks[0].enabled);
-            }
+        
+        // Store audio track reference
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0) {
+            audioTrackRef.current = audioTracks[0];
+            setIsMuted(!audioTracks[0].enabled);
+            console.log('✅ PreJoin - Audio track initialized, enabled:', audioTracks[0].enabled);
         }
     };
 
+    // FIXED MUTE FUNCTION - Uses audioTrackRef for reliability
+    const toggleMute = () => {
+        console.log('🔄 toggleMute called');
+        
+        // Try to use audioTrackRef first (most reliable)
+        if (audioTrackRef.current) {
+            const currentEnabled = audioTrackRef.current.enabled;
+            const newEnabledState = !currentEnabled;
+            
+            audioTrackRef.current.enabled = newEnabledState;
+            setIsMuted(!newEnabledState);
+            
+            console.log(`🎤 Audio ${newEnabledState ? 'UNMUTED' : 'MUTED'} via audioTrackRef`);
+            
+            // Send mute status to other participants
+            sendMessage('user_mute_toggle', {
+                userId,
+                userName,
+                isMuted: !newEnabledState
+            });
+            
+        } else if (localStream) {
+            // Fallback to localStream
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const audioTrack = audioTracks[0];
+                const currentEnabled = audioTrack.enabled;
+                const newEnabledState = !currentEnabled;
+                
+                audioTrack.enabled = newEnabledState;
+                setIsMuted(!newEnabledState);
+                audioTrackRef.current = audioTrack;
+                
+                console.log(`🎤 Audio ${newEnabledState ? 'UNMUTED' : 'MUTED'} via localStream`);
+                
+                sendMessage('user_mute_toggle', {
+                    userId,
+                    userName,
+                    isMuted: !newEnabledState
+                });
+            } else {
+                console.warn('⚠️ No audio tracks found');
+                setIsMuted(!isMuted); // UI fallback
+            }
+        } else {
+            console.warn('⚠️ No audio available');
+            setIsMuted(!isMuted); // UI fallback
+        }
+    };
+
+    // SIMPLIFIED VIDEO TOGGLE - Preserves audio track properly
     const toggleVideo = async () => {
         try {
-            console.log('toggleVideo called, isVideoOff:', isVideoOff);
-            console.log('Current localStream tracks:', localStream?.getTracks().map(t => ({ 
-                kind: t.kind, 
-                enabled: t.enabled 
-            })));
-            
             if (isVideoOff) {
                 // Turn camera ON
-                console.log('Turning camera ON');
+                console.log('📹 Turning camera ON...');
                 
-                // Get current audio tracks
-                const audioTracks = localStream ? localStream.getAudioTracks() : [];
+                // Get current audio tracks (preserve them)
+                const currentAudioTracks = localStream ? localStream.getAudioTracks() : [];
                 
-                // Get new video track
-                const videoStream = await navigator.mediaDevices.getUserMedia({
+                // Create video stream
+                const videoConstraints = {
                     video: {
                         width: { ideal: 1280 },
                         height: { ideal: 720 },
                         frameRate: { ideal: 30 }
-                    }
-                });
+                    },
+                    audio: false // We'll add our existing audio
+                };
+                
+                const videoStream = await navigator.mediaDevices.getUserMedia(videoConstraints);
                 const videoTrack = videoStream.getVideoTracks()[0];
                 
-                // Create new stream
+                // Create new stream with existing audio + new video
                 const newStream = new MediaStream();
                 
-                // Add audio tracks if they exist
-                audioTracks.forEach(track => newStream.addTrack(track));
+                // Add existing audio tracks
+                currentAudioTracks.forEach(track => {
+                    newStream.addTrack(track);
+                    console.log('🎵 Preserved audio track:', track.enabled);
+                });
                 
-                // Add video track
+                // Add new video track
                 newStream.addTrack(videoTrack);
                 
-                // Stop the temporary video stream
+                // Stop temporary video stream tracks
                 videoStream.getTracks().forEach(track => {
                     if (track !== videoTrack) track.stop();
                 });
                 
-                console.log('New stream tracks:', newStream.getTracks().map(t => ({ 
-                    kind: t.kind, 
-                    enabled: t.enabled 
-                })));
-                
-                // Set the new stream
+                // Update state
                 setLocalStream(newStream);
                 setIsVideoOff(false);
                 
-                // Send updated stream to WebRTC
-                if (sendMessage) {
-                    sendMessage('stream_updated', {
-                        userId,
-                        hasVideo: true
-                    });
-                }
+                console.log('✅ Camera ON, audio preserved');
+                
             } else {
                 // Turn camera OFF
-                console.log('Turning camera OFF');
+                console.log('📹 Turning camera OFF...');
                 
                 if (localStream) {
-                    // Get current audio tracks
-                    const audioTracks = localStream.getAudioTracks();
-                    
                     // Stop video tracks
                     const videoTracks = localStream.getVideoTracks();
-                    videoTracks.forEach(track => track.stop());
+                    videoTracks.forEach(track => {
+                        track.stop();
+                        console.log('📹 Stopped video track');
+                    });
                     
                     // Create new stream with only audio
+                    const audioTracks = localStream.getAudioTracks();
                     const newStream = new MediaStream();
-                    audioTracks.forEach(track => newStream.addTrack(track));
                     
-                    console.log('New audio-only stream tracks:', newStream.getTracks().map(t => ({ 
-                        kind: t.kind, 
-                        enabled: t.enabled 
-                    })));
+                    audioTracks.forEach(track => {
+                        newStream.addTrack(track);
+                        console.log('🎵 Preserved audio track:', track.enabled);
+                    });
                     
+                    // Update state
                     setLocalStream(newStream);
                     setIsVideoOff(true);
                     
-                    // Send updated stream to WebRTC
-                    if (sendMessage) {
-                        sendMessage('stream_updated', {
-                            userId,
-                            hasVideo: false
-                        });
-                    }
+                    console.log('✅ Camera OFF, audio preserved');
                 }
             }
-        } catch (error) {
-            console.error('Error toggling video:', error);
-            if (error.name === 'NotAllowedError') {
-                alert('Camera permission denied. Please allow camera access in your browser settings.');
-            } else if (error.name === 'NotFoundError') {
-                alert('No camera found. Please connect a camera and try again.');
-            } else if (error.name === 'NotReadableError') {
-                alert('Camera is already in use by another application.');
-            } else if (error.name === 'OverconstrainedError') {
-                alert('Camera does not support the requested settings.');
-            } else {
-                alert('Could not access camera. Please check permissions and try again.');
-            }
             
-            // Don't change state if there's an error
-            setIsVideoOff(true);
+            // Notify other participants
+            sendMessage('user_video_toggle', {
+                userId,
+                userName,
+                hasVideo: !isVideoOff
+            });
+            
+        } catch (error) {
+            console.error('❌ Error toggling video:', error);
+            alert('Could not access camera. Please check permissions and try again.');
         }
     };
 
@@ -243,7 +303,6 @@ export default function MeetingRoom() {
                 setScreenStream(stream);
                 setIsScreenSharing(true);
 
-                // Handle when user stops sharing via browser UI
                 stream.getVideoTracks()[0].onended = () => {
                     setIsScreenSharing(false);
                     setScreenStream(null);
@@ -285,6 +344,41 @@ export default function MeetingRoom() {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    // Test microphone function
+    const testMicrophone = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const track = stream.getAudioTracks()[0];
+            console.log('🎤 Microphone test - Track enabled:', track.enabled);
+            
+            // Play a test sound
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 440;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.1;
+            
+            oscillator.start();
+            setTimeout(() => {
+                oscillator.stop();
+                audioContext.close();
+            }, 500);
+            
+            stream.getTracks().forEach(t => t.stop());
+            
+            alert('Microphone test complete! Check console for details.');
+            
+        } catch (error) {
+            console.error('❌ Microphone test failed:', error);
+            alert('Microphone access denied or failed. Check browser permissions.');
+        }
+    };
+
     const handleLeave = () => {
         if (confirm('Are you sure you want to leave?')) {
             if (localStream) {
@@ -298,41 +392,147 @@ export default function MeetingRoom() {
         }
     };
 
+    // More options functions
+    const openMeetingSettings = () => {
+        alert('Meeting settings would open here');
+        setShowMoreOptions(false);
+    };
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+        setShowMoreOptions(false);
+    };
+
+    const openHelp = () => {
+        alert('Help documentation would open here');
+        setShowMoreOptions(false);
+    };
+
+    const reportIssue = () => {
+        alert('Report issue modal would open here');
+        setShowMoreOptions(false);
+    };
+
+    // Force mute function
+    const forceMute = (mute) => {
+        if (audioTrackRef.current) {
+            audioTrackRef.current.enabled = !mute;
+            setIsMuted(mute);
+            console.log(`🔇 Audio ${mute ? 'FORCE MUTED' : 'FORCE UNMUTED'}`);
+        } else if (localStream) {
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                audioTracks[0].enabled = !mute;
+                setIsMuted(mute);
+            }
+        }
+    };
+
+    // Reset audio function
+    const resetAudio = async () => {
+        if (confirm('Reset audio? This will reinitialize your microphone.')) {
+            try {
+                // Stop current audio
+                if (localStream) {
+                    const audioTracks = localStream.getAudioTracks();
+                    audioTracks.forEach(track => track.stop());
+                }
+                
+                // Get new audio
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const newAudioTrack = audioStream.getAudioTracks()[0];
+                
+                // Get current video if any
+                const videoTracks = localStream ? localStream.getVideoTracks() : [];
+                
+                // Create new stream
+                const newStream = new MediaStream();
+                newStream.addTrack(newAudioTrack);
+                videoTracks.forEach(track => newStream.addTrack(track));
+                
+                // Update ref and state
+                audioTrackRef.current = newAudioTrack;
+                setLocalStream(newStream);
+                setIsMuted(false);
+                
+                console.log('🔄 Audio reset complete');
+                alert('Audio reset successfully!');
+                
+            } catch (error) {
+                console.error('❌ Audio reset failed:', error);
+                alert('Failed to reset audio. Check microphone permissions.');
+            }
+        }
+    };
+
     if (!hasJoined) {
-        return <PreJoinScreen 
-            meetingId={meetingId} 
-            onJoin={handlePreJoin} 
-            initialVideoOff={true} // Start with camera off
-        />;
+        return <PreJoinScreen meetingId={meetingId} onJoin={handlePreJoin} />;
     }
 
     return (
         <div className="h-screen bg-[#1f1f1f] flex flex-col relative overflow-hidden">
-            {/* Teams-style Header */}
+            {/* Header */}
             <div className="bg-[#292929] border-b border-[#3d3d3d] px-4 py-2 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    {/* Meeting info */}
-                    <div className="flex items-center gap-3">
-                        <div className="text-white">
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-sm font-semibold">TrueTalk Meeting</h1>
-                                {isConnected ? (
-                                    <div className="flex items-center gap-1 text-xs text-green-400">
-                                        <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                                        <span>Connected</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-1 text-xs text-yellow-400">
-                                        <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
-                                        <span>Connecting...</span>
-                                    </div>
-                                )}
-                            </div>
+                <div className="flex items-center gap-3">
+                    <div className="text-white">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-sm font-semibold">TrueTalk Meeting</h1>
+                            {isConnected ? (
+                                <div className="flex items-center gap-1 text-xs text-green-400">
+                                    <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                    <span>Connected</span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-1 text-xs text-yellow-400">
+                                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
+                                    <span>Connecting...</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Debug buttons - only show in debug mode */}
+                    <button
+                        onClick={() => setDebugMode(!debugMode)}
+                        className="px-2 py-1 text-xs bg-gray-700 text-white rounded"
+                    >
+                        {debugMode ? 'Hide Debug' : 'Debug'}
+                    </button>
+                    
+                    {debugMode && (
+                        <>
+                            <button
+                                onClick={testMicrophone}
+                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-md transition-all text-white text-sm flex items-center gap-2"
+                            >
+                                <Volume2 className="w-4 h-4" />
+                                Test Mic
+                            </button>
+                            
+                            <button
+                                onClick={resetAudio}
+                                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 rounded-md transition-all text-white text-sm"
+                            >
+                                Reset Audio
+                            </button>
+                            
+                            <button
+                                onClick={() => console.log('Audio track ref:', audioTrackRef.current)}
+                                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 rounded-md transition-all text-white text-sm"
+                            >
+                                Log Audio
+                            </button>
+                        </>
+                    )}
+
                     {/* View Mode Toggle */}
                     <div className="flex bg-[#3d3d3d] rounded-md p-1">
                         <button
@@ -385,9 +585,50 @@ export default function MeetingRoom() {
                     </button>
 
                     {/* More options */}
-                    <button className="p-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d] rounded-md transition-all text-white">
-                        <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    <div className="relative" ref={moreOptionsRef}>
+                        <button 
+                            onClick={() => setShowMoreOptions(!showMoreOptions)}
+                            className="p-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d] rounded-md transition-all text-white"
+                        >
+                            <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                        
+                        {/* More options dropdown */}
+                        {showMoreOptions && (
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-[#3d3d3d] rounded-md shadow-lg z-50 py-1 border border-[#4d4d4d]">
+                                <button
+                                    onClick={toggleFullscreen}
+                                    className="w-full px-4 py-2 text-left text-white hover:bg-[#4d4d4d] text-sm"
+                                >
+                                    Toggle Fullscreen
+                                </button>
+                                <button
+                                    onClick={() => forceMute(true)}
+                                    className="w-full px-4 py-2 text-left text-white hover:bg-[#4d4d4d] text-sm"
+                                >
+                                    Force Mute All
+                                </button>
+                                <button
+                                    onClick={openMeetingSettings}
+                                    className="w-full px-4 py-2 text-left text-white hover:bg-[#4d4d4d] text-sm"
+                                >
+                                    Meeting Settings
+                                </button>
+                                <button
+                                    onClick={openHelp}
+                                    className="w-full px-4 py-2 text-left text-white hover:bg-[#4d4d4d] text-sm"
+                                >
+                                    Help
+                                </button>
+                                <button
+                                    onClick={reportIssue}
+                                    className="w-full px-4 py-2 text-left text-white hover:bg-[#4d4d4d] text-sm"
+                                >
+                                    Report Issue
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -401,8 +642,6 @@ export default function MeetingRoom() {
                         isMuted={isMuted}
                         userName={userName}
                         viewMode={viewMode}
-                        onToggleVideo={toggleVideo}
-                        onToggleMute={toggleMute}
                     />
                 </div>
 
@@ -434,8 +673,16 @@ export default function MeetingRoom() {
                                         {isVideoOff && (
                                             <span className="text-xs text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Camera off</span>
                                         )}
-                                        {isMuted && (
-                                            <span className="text-xs text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Muted</span>
+                                        {isMuted ? (
+                                            <span className="text-xs text-red-400 bg-black/30 px-1.5 py-0.5 rounded">
+                                                <VolumeX className="w-3 h-3 inline mr-1" />
+                                                Muted
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-green-400 bg-black/30 px-1.5 py-0.5 rounded">
+                                                <Volume2 className="w-3 h-3 inline mr-1" />
+                                                Unmuted
+                                            </span>
                                         )}
                                     </div>
                                 </div>

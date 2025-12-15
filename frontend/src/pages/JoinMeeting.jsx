@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Video, ArrowLeft, LogIn } from 'lucide-react';
 
 export default function JoinMeeting() {
-    const [meetingInput, setMeetingInput] = useState('');
+    const { meetingId } = useParams(); // Get meetingId from URL if provided
+    const [meetingInput, setMeetingInput] = useState(meetingId || ''); // Initialize with meetingId if present
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -18,7 +19,6 @@ export default function JoinMeeting() {
         setLoading(true);
 
         // Navigate to meeting room
-        // The input can be either UUID or meeting code
         navigate(`/meeting/${meetingInput.trim()}`);
     };
 
@@ -40,10 +40,13 @@ export default function JoinMeeting() {
                         <Video className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-800 mb-2">
-                        Join a Meeting
+                        {meetingId ? 'Join Meeting' : 'Enter Meeting Details'}
                     </h1>
                     <p className="text-gray-600">
-                        Enter the meeting ID or code to join
+                        {meetingId 
+                            ? 'Ready to join the meeting!' 
+                            : 'Enter the meeting ID or code to join'
+                        }
                     </p>
                 </div>
 
@@ -62,7 +65,10 @@ export default function JoinMeeting() {
                             required
                         />
                         <p className="mt-2 text-sm text-gray-500">
-                            Enter the meeting code (e.g., abc-def-ghi) or full meeting ID
+                            {meetingId 
+                                ? 'Meeting code pre-filled. Click "Join Meeting" to continue.' 
+                                : 'Enter the meeting code (e.g., abc-def-ghi) or full meeting ID'
+                            }
                         </p>
                     </div>
 
@@ -79,7 +85,11 @@ export default function JoinMeeting() {
                 {/* Info Box */}
                 <div className="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
                     <p className="text-sm text-gray-700">
-                        <strong className="text-blue-700">Tip:</strong> Ask the meeting host to share the meeting link or code with you.
+                        <strong className="text-blue-700">Tip:</strong> 
+                        {meetingId 
+                            ? ' Click "Join Meeting" to enter the meeting room.' 
+                            : ' Ask the meeting host to share the meeting link or code with you.'
+                        }
                     </p>
                 </div>
             </div>
