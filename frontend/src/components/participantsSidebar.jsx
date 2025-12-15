@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, Mic, MicOff, Video, VideoOff, Pin, MoreVertical, User } from 'lucide-react';
+import { X, Search, Pin, MoreVertical } from 'lucide-react';
 
 export default function ParticipantsSidebar({ 
     participants = [], 
@@ -78,9 +78,6 @@ export default function ParticipantsSidebar({
                                 <div className="flex items-center gap-2">
                                     <p className="text-white text-sm font-medium truncate">
                                         {participant.name}
-                                        {participant.isCurrent && (
-                                            <span className="ml-2 text-gray-400 text-xs">(You)</span>
-                                        )}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
@@ -89,20 +86,6 @@ export default function ParticipantsSidebar({
                                         <span className="text-gray-400 text-xs">
                                             {participant.isConnected ? 'Connected' : 'Disconnected'}
                                         </span>
-                                    </div>
-                                    
-                                    {/* Status indicators */}
-                                    <div className="flex items-center gap-1">
-                                        {participant.isMuted && (
-                                            <div className="w-3 h-3 bg-[#c4314b] rounded-full flex items-center justify-center">
-                                                <MicOff className="w-2 h-2 text-white" />
-                                            </div>
-                                        )}
-                                        {participant.isVideoOff && (
-                                            <div className="w-3 h-3 bg-[#c4314b] rounded-full flex items-center justify-center">
-                                                <VideoOff className="w-2 h-2 text-white" />
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             </div>

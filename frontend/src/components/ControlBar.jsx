@@ -1,4 +1,4 @@
-import { Mic, MicOff, Video, VideoOff, MessageSquare, PhoneOff, Smile, Hand, Heart, ThumbsUp, PartyPopper, Users, MoreHorizontal, Monitor, MonitorOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MessageSquare, PhoneOff, Smile, Users, MoreHorizontal, Monitor, MonitorOff } from 'lucide-react';
 import { useState } from 'react';
 
 export default function ControlBar({
@@ -31,6 +31,15 @@ export default function ControlBar({
         setShowReactions(false);
     };
 
+    // Handle video toggle with improved logic
+    const handleToggleVideo = async () => {
+        try {
+            onToggleVideo();
+        } catch (error) {
+            console.error('Error toggling video:', error);
+        }
+    };
+
     return (
         <div className="bg-[#292929] border-t border-[#3d3d3d] px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -50,20 +59,25 @@ export default function ControlBar({
                     <span className="text-xs text-white">{isMuted ? 'Unmute' : 'Mute'}</span>
                 </button>
 
-                {/* Video Button */}
+                {/* Video Button - Updated to handle camera on/off properly */}
                 <button
-                    onClick={onToggleVideo}
+                    onClick={handleToggleVideo}
                     className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isVideoOff
                         ? 'bg-[#c4314b] hover:bg-[#a92b40]'
                         : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
                         }`}
                 >
                     {isVideoOff ? (
-                        <VideoOff className="w-5 h-5 text-white" />
+                        <>
+                            <VideoOff className="w-5 h-5 text-white" />
+                            <span className="text-xs text-white">Camera Off</span>
+                        </>
                     ) : (
-                        <Video className="w-5 h-5 text-white" />
+                        <>
+                            <Video className="w-5 h-5 text-white" />
+                            <span className="text-xs text-white">Camera On</span>
+                        </>
                     )}
-                    <span className="text-xs text-white">{isVideoOff ? 'Camera' : 'Camera'}</span>
                 </button>
 
                 {/* Screen Share Button */}

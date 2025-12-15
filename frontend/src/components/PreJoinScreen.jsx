@@ -1,217 +1,473 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Video, VideoOff, Mic, MicOff, Settings, Sparkles } from 'lucide-react';
+// PreJoinScreen.jsx
+import { useState, useRef, useEffect } from 'react';
+import { Camera, CameraOff, Mic, MicOff, User, AlertCircle } from 'lucide-react';
 
-export default function PreJoinScreen({ onJoin }) {
-    const [userName, setUserName] = useState('Guest User');
+export default function PreJoinScreen({ meetingId, onJoin, initialVideoOff = false }) {
+    const [userName, setUserName] = useState('');
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(false);
-    const [stream, setStream] = useState(null);
+    const [isVideoOff, setIsVideoOff] = useState(initialVideoOff);
+    const [localStream, setLocalStream] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [showSettings, setShowSettings] = useState(false);
+    const [availableDevices, setAvailableDevices] = useState({
+        audio: [],
+        video: []
+    });
+    
     const videoRef = useRef(null);
-    const navigate = useNavigate();
 
+    // Get available devices
     useEffect(() => {
-        let isMounted = true;
-        let mediaStream = null;
-
-        const getMedia = async () => {
+        const getDevices = async () => {
             try {
-                const newStream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
-                    audio: true,
-                });
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                const videoInputs = devices.filter(device => device.kind === 'videoinput');
                 
-                if (isMounted) {
-                    mediaStream = newStream;
-                    setStream(newStream);
+                setAvailableDevices({
+                    audio: audioInputs,
+                    video: videoInputs
+                });
+            } catch (err) {
+                console.error('Error getting devices:', err);
+            }
+        };
+        
+        getDevices();
+    }, []);
+
+    // Initialize camera preview
+    useEffect(() => {
+        const initCameraPreview = async () => {
+            if (!isVideoOff) {
+                try {
+                    setIsLoading(true);
+                    setError('');
                     
-                    // Set video source immediately
+                    const constraints = {
+                        audio: true,
+                        video: {
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        }
+                    };
+
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    setLocalStream(stream);
+                    
                     if (videoRef.current) {
-                        videoRef.current.srcObject = newStream;
+                        videoRef.current.srcObject = stream;
                     }
-                } else {
-                    // Clean up if component unmounted while getting media
-                    newStream.getTracks().forEach(track => track.stop());
+                    
+                } catch (err) {
+                    console.error('Error accessing media devices:', err);
+                    if (err.name === 'NotAllowedError') {
+                        setError('Camera/microphone access denied. Please allow permissions.');
+                    } else if (err.name === 'NotFoundError') {
+                        setError('No camera/microphone found.');
+                    } else {
+                        setError('Could not access camera/microphone.');
+                    }
+                    setIsVideoOff(true);
+                } finally {
+                    setIsLoading(false);
                 }
-            } catch (error) {
-                console.error('Error accessing media:', error);
-                if (isMounted) {
-                    alert('Please grant camera and microphone permissions');
+            } else if (localStream) {
+                // Stop stream if turning video off
+                localStream.getTracks().forEach(track => track.stop());
+                setLocalStream(null);
+                if (videoRef.current) {
+                    videoRef.current.srcObject = null;
                 }
             }
         };
 
-        getMedia();
+        initCameraPreview();
+    }, [isVideoOff]);
 
+    // Clean up on unmount
+    useEffect(() => {
         return () => {
-            isMounted = false;
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
             }
         };
     }, []);
 
-    useEffect(() => {
-        if (stream && videoRef.current) {
-            videoRef.current.srcObject = stream;
+    const handleJoinMeeting = () => {
+        if (!userName.trim()) {
+            setError('Please enter your name');
+            return;
         }
-    }, [stream]);
 
-    const toggleMute = () => {
-        if (stream) {
-            stream.getAudioTracks().forEach(track => {
-                track.enabled = !track.enabled;
-            });
-            setIsMuted(!isMuted);
+        if (!localStream && !isVideoOff) {
+            // Try to get stream if not already available
+            const getStream = async () => {
+                try {
+                    setIsLoading(true);
+                    const constraints = {
+                        audio: !isMuted,
+                        video: !isVideoOff && {
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
+                    };
+
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    
+                    // Apply mute settings
+                    if (stream.getAudioTracks().length > 0) {
+                        stream.getAudioTracks()[0].enabled = !isMuted;
+                    }
+                    
+                    onJoin(userName.trim(), stream, isMuted, isVideoOff);
+                } catch (err) {
+                    console.error('Error getting stream:', err);
+                    setError('Failed to access media devices. Please check permissions.');
+                    setIsLoading(false);
+                }
+            };
+            
+            getStream();
+        } else {
+            // Create a new stream with current settings
+            const createStream = async () => {
+                try {
+                    setIsLoading(true);
+                    
+                    // If video is off but we want audio, create audio-only stream
+                    const constraints = {
+                        audio: true,
+                        video: !isVideoOff && {
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
+                    };
+
+                    let stream;
+                    
+                    if (isVideoOff) {
+                        // Audio only
+                        try {
+                            const audioStream = await navigator.mediaDevices.getUserMedia({
+                                audio: true,
+                                video: false
+                            });
+                            
+                            if (audioStream.getAudioTracks().length > 0) {
+                                audioStream.getAudioTracks()[0].enabled = !isMuted;
+                            }
+                            stream = audioStream;
+                        } catch (audioErr) {
+                            // If audio fails too, create an empty stream
+                            stream = new MediaStream();
+                        }
+                    } else {
+                        // Audio and video
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        
+                        // Apply mute settings
+                        if (stream.getAudioTracks().length > 0) {
+                            stream.getAudioTracks()[0].enabled = !isMuted;
+                        }
+                        
+                        // Apply video settings
+                        if (stream.getVideoTracks().length > 0) {
+                            stream.getVideoTracks()[0].enabled = true;
+                        }
+                    }
+                    
+                    onJoin(userName.trim(), stream, isMuted, isVideoOff);
+                } catch (err) {
+                    console.error('Error creating stream:', err);
+                    setError('Failed to setup media devices. Please check permissions.');
+                    
+                    // Even if media fails, join with empty stream
+                    const emptyStream = new MediaStream();
+                    onJoin(userName.trim(), emptyStream, true, true);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            
+            createStream();
         }
     };
 
-    const toggleVideo = () => {
-        if (stream) {
-            stream.getVideoTracks().forEach(track => {
-                track.enabled = !track.enabled;
-            });
-            setIsVideoOff(!isVideoOff);
+    const toggleAudio = () => {
+        setIsMuted(!isMuted);
+        if (localStream && localStream.getAudioTracks().length > 0) {
+            localStream.getAudioTracks()[0].enabled = !isMuted;
         }
     };
 
-    const handleJoin = () => {
-        onJoin(userName, stream, isMuted, isVideoOff);
+    const toggleVideo = async () => {
+        const newVideoState = !isVideoOff;
+        setIsVideoOff(newVideoState);
+        
+        if (!newVideoState && !localStream) {
+            // Turning video on
+            try {
+                setIsLoading(true);
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: true
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                setLocalStream(stream);
+                
+                // Apply audio settings
+                if (stream.getAudioTracks().length > 0) {
+                    stream.getAudioTracks()[0].enabled = !isMuted;
+                }
+                
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error('Error turning video on:', err);
+                setError('Could not access camera');
+                setIsVideoOff(true);
+            } finally {
+                setIsLoading(false);
+            }
+        } else if (localStream) {
+            // Turning video off
+            const videoTracks = localStream.getVideoTracks();
+            videoTracks.forEach(track => track.stop());
+            
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
+        }
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !isLoading) {
+            handleJoinMeeting();
+        }
     };
 
     return (
-        <div className="h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-6">
-            {/* Background effects */}
-            <div className="absolute inset-0 overflow-hidden">
-                <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-full filter blur-3xl animate-float-slow"></div>
-                <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full filter blur-3xl animate-float-slow-reverse"></div>
-            </div>
-
-            <div className="relative z-10 max-w-4xl w-full">
-                {/* Header */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center gap-3 mb-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl blur-lg opacity-75 animate-pulse"></div>
-                            <div className="relative w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-                                <Sparkles className="w-8 h-8 text-white" />
-                            </div>
-                        </div>
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
-                            TrueTalk Meeting
-                        </h1>
-                    </div>
-                    <p className="text-xl text-gray-300">Ready to join?</p>
-                </div>
-
-                {/* Main content */}
-                <div className="bg-black/30 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden">
-                    <div className="grid md:grid-cols-2 gap-6 p-8">
-                        {/* Video preview */}
-                        <div className="space-y-4">
-                            <div className="relative aspect-video bg-gray-900 rounded-2xl overflow-hidden border border-white/10">
-                                {stream && !isVideoOff ? (
-                                    <video
-                                        ref={videoRef}
-                                        autoPlay
-                                        muted
-                                        playsInline
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/50 to-blue-900/50">
-                                        <div className="text-center">
-                                            <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                <VideoOff className="w-12 h-12 text-white" />
-                                            </div>
-                                            <p className="text-white font-medium">Camera is off</p>
-                                        </div>
+        <div className="h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
+            <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Left Panel - Preview and Controls */}
+                <div className="bg-gray-800 rounded-2xl p-6 flex flex-col">
+                    <h2 className="text-white text-2xl font-semibold mb-6">Setup your audio and video</h2>
+                    
+                    {/* Preview Area */}
+                    <div className="flex-1 bg-gray-900 rounded-xl overflow-hidden mb-6 relative">
+                        {!isVideoOff ? (
+                            <>
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                {isLoading && (
+                                    <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
                                     </div>
                                 )}
-
-                                {/* Overlay gradient */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none"></div>
-
-                                {/* Name badge */}
-                                <div className="absolute bottom-4 left-4 right-4">
-                                    <div className="bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 border border-white/20">
-                                        <p className="text-white font-semibold">{userName || 'Guest User'}</p>
+                            </>
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                                <div className="text-center">
+                                    <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <CameraOff className="w-12 h-12 text-gray-500" />
                                     </div>
+                                    <p className="text-gray-400">Camera is off</p>
                                 </div>
                             </div>
-
-                            {/* Controls */}
-                            <div className="flex items-center justify-center gap-3">
-                                <button
-                                    onClick={toggleMute}
-                                    className={`p-4 rounded-xl transition-all ${isMuted
-                                            ? 'bg-red-500 hover:bg-red-600'
-                                            : 'bg-white/10 hover:bg-white/20 border border-white/20'
-                                        }`}
-                                >
-                                    {isMuted ? (
-                                        <MicOff className="w-6 h-6 text-white" />
-                                    ) : (
-                                        <Mic className="w-6 h-6 text-white" />
-                                    )}
-                                </button>
-
-                                <button
-                                    onClick={toggleVideo}
-                                    className={`p-4 rounded-xl transition-all ${isVideoOff
-                                            ? 'bg-red-500 hover:bg-red-600'
-                                            : 'bg-white/10 hover:bg-white/20 border border-white/20'
-                                        }`}
-                                >
-                                    {isVideoOff ? (
-                                        <VideoOff className="w-6 h-6 text-white" />
-                                    ) : (
-                                        <Video className="w-6 h-6 text-white" />
-                                    )}
-                                </button>
-
-                                <button className="p-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 transition-all">
-                                    <Settings className="w-6 h-6 text-white" />
-                                </button>
+                        )}
+                        
+                        {/* User Name Badge */}
+                        {userName && (
+                            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg">
+                                <p className="text-white text-sm font-medium">{userName}</p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Quick Controls */}
+                    <div className="flex items-center justify-center gap-6 mb-8">
+                        <button
+                            onClick={toggleAudio}
+                            className={`flex flex-col items-center gap-2 p-3 rounded-xl transition-all ${isMuted
+                                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                    : 'bg-gray-700 text-white hover:bg-gray-600'
+                                }`}
+                        >
+                            <div className={`p-3 rounded-full ${isMuted ? 'bg-red-500' : 'bg-gray-600'}`}>
+                                {isMuted ? (
+                                    <MicOff className="w-6 h-6" />
+                                ) : (
+                                    <Mic className="w-6 h-6" />
+                                )}
+                            </div>
+                            <span className="text-sm font-medium">
+                                {isMuted ? 'Unmute' : 'Mute'}
+                            </span>
+                        </button>
+                        
+                        <button
+                            onClick={toggleVideo}
+                            className={`flex flex-col items-center gap-2 p-3 rounded-xl transition-all ${isVideoOff
+                                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                    : 'bg-gray-700 text-white hover:bg-gray-600'
+                                }`}
+                        >
+                            <div className={`p-3 rounded-full ${isVideoOff ? 'bg-red-500' : 'bg-gray-600'}`}>
+                                {isVideoOff ? (
+                                    <CameraOff className="w-6 h-6" />
+                                ) : (
+                                    <Camera className="w-6 h-6" />
+                                )}
+                            </div>
+                            <span className="text-sm font-medium">
+                                {isVideoOff ? 'Turn on' : 'Turn off'}
+                            </span>
+                        </button>
+                    </div>
+                    
+                    {/* Settings Toggle */}
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        className="text-gray-400 text-sm hover:text-white mb-4"
+                    >
+                        {showSettings ? 'Hide settings' : 'Show settings'}
+                    </button>
+                    
+                    {/* Device Settings */}
+                    {showSettings && (
+                        <div className="bg-gray-900 rounded-xl p-4 mb-6 space-y-4">
+                            <div>
+                                <label className="text-gray-400 text-sm block mb-2">Camera</label>
+                                <select className="w-full bg-gray-800 text-white rounded-lg px-3 py-2">
+                                    {availableDevices.video.map(device => (
+                                        <option key={device.deviceId} value={device.deviceId}>
+                                            {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-gray-400 text-sm block mb-2">Microphone</label>
+                                <select className="w-full bg-gray-800 text-white rounded-lg px-3 py-2">
+                                    {availableDevices.audio.map(device => (
+                                        <option key={device.deviceId} value={device.deviceId}>
+                                            {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
-
-                        {/* Join form */}
-                        <div className="flex flex-col justify-center space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Your Name
-                                </label>
+                    )}
+                </div>
+                
+                {/* Right Panel - Join Info */}
+                <div className="flex flex-col">
+                    <div className="flex-1 bg-gray-800 rounded-2xl p-8 flex flex-col">
+                        <div className="mb-8">
+                            <h1 className="text-3xl font-bold text-white mb-2">TrueTalk Meeting</h1>
+                            <p className="text-gray-400">Ready to join?</p>
+                        </div>
+                        
+                        {/* Meeting Info */}
+                        <div className="mb-8">
+                            <p className="text-gray-400 text-sm mb-2">Meeting ID</p>
+                            <div className="bg-gray-900 rounded-xl p-4">
+                                <p className="text-white text-xl font-mono">{meetingId}</p>
+                            </div>
+                        </div>
+                        
+                        {/* User Name Input */}
+                        <div className="mb-8">
+                            <label className="text-gray-400 text-sm block mb-2">Your Name</label>
+                            <div className="relative">
+                                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                                    <User className="w-5 h-5 text-gray-500" />
+                                </div>
                                 <input
                                     type="text"
                                     value={userName}
                                     onChange={(e) => setUserName(e.target.value)}
+                                    onKeyPress={handleKeyPress}
                                     placeholder="Enter your name"
-                                    className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50 outline-none transition-all"
+                                    className="w-full bg-gray-900 text-white pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    autoFocus
                                 />
                             </div>
-
-                            <div className="bg-blue-500/20 border border-blue-500/30 rounded-xl p-4">
-                                <p className="text-sm text-blue-200">
-                                    <strong className="text-blue-100">Tip:</strong> Make sure your camera and microphone are working before joining.
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={handleJoin}
-                                disabled={!userName.trim()}
-                                className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-purple-500/50 text-lg"
-                            >
-                                Join Meeting
-                            </button>
-
-                            <button
-                                onClick={() => navigate('/')}
-                                className="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold py-3 px-6 rounded-xl transition-all"
-                            >
-                                Cancel
-                            </button>
                         </div>
+                        
+                        {/* Device Status */}
+                        <div className="bg-gray-900 rounded-xl p-4 mb-8 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-400">Camera</span>
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${isVideoOff ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                    <span className="text-white">{isVideoOff ? 'Off' : 'On'}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-400">Microphone</span>
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${isMuted ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                    <span className="text-white">{isMuted ? 'Muted' : 'Unmuted'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Error Message */}
+                        {error && (
+                            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl">
+                                <div className="flex items-center gap-2 text-red-400">
+                                    <AlertCircle className="w-5 h-5" />
+                                    <p className="text-sm">{error}</p>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Tip */}
+                        <div className="text-gray-500 text-sm mb-8">
+                            <p className="mb-2">TIP: Make sure your camera and microphone are working before joining.</p>
+                            <p>Click the buttons above to test your audio and video.</p>
+                        </div>
+                        
+                        {/* Join Button */}
+                        <button
+                            onClick={handleJoinMeeting}
+                            disabled={isLoading || !userName.trim()}
+                            className={`w-full py-4 rounded-xl font-semibold text-lg transition-all ${isLoading || !userName.trim()
+                                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/25'
+                                }`}
+                        >
+                            {isLoading ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                    <span>Setting up...</span>
+                                </div>
+                            ) : (
+                                'Join Meeting'
+                            )}
+                        </button>
+                    </div>
+                    
+                    {/* Footer */}
+                    <div className="mt-6 text-center">
+                        <p className="text-gray-500 text-sm">
+                            By joining, you agree to our Terms of Service and Privacy Policy
+                        </p>
                     </div>
                 </div>
             </div>

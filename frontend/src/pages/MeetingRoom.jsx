@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
@@ -27,7 +27,7 @@ export default function MeetingRoom() {
     const [hasJoined, setHasJoined] = useState(false);
     const [localStream, setLocalStream] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(false);
+    const [isVideoOff, setIsVideoOff] = useState(true); // Camera off by default
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [screenStream, setScreenStream] = useState(null);
     const [showChat, setShowChat] = useState(false);
@@ -44,7 +44,6 @@ export default function MeetingRoom() {
         useWebRTC(localStream, sendMessage, userId);
 
     const showReaction = useCallback((emoji, fromUserId) => {
-        // Use performance.now() which is allowed in callbacks
         const id = performance.now();
         const position = Math.random() * 80 + 10;
         
@@ -89,7 +88,26 @@ export default function MeetingRoom() {
         });
     }, [isConnected, hasJoined, on, handleUserJoined, handleOffer, handleAnswer, handleICECandidate, showReaction]);
 
+    // Clean up streams on unmount
+    useEffect(() => {
+        return () => {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
+
     const handlePreJoin = (name, stream, muted, videoOff) => {
+        console.log('PreJoin - Received stream:', stream);
+        console.log('PreJoin - Stream tracks:', stream.getTracks().map(t => ({ 
+            kind: t.kind, 
+            enabled: t.enabled,
+            label: t.label 
+        })));
+        
         setUserName(name);
         setLocalStream(stream);
         setIsMuted(muted);
@@ -99,19 +117,118 @@ export default function MeetingRoom() {
 
     const toggleMute = () => {
         if (localStream) {
-            localStream.getAudioTracks().forEach(track => {
-                track.enabled = !track.enabled;
-            });
-            setIsMuted(!isMuted);
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                audioTracks[0].enabled = !audioTracks[0].enabled;
+                setIsMuted(!audioTracks[0].enabled);
+            }
         }
     };
 
-    const toggleVideo = () => {
-        if (localStream) {
-            localStream.getVideoTracks().forEach(track => {
-                track.enabled = !track.enabled;
-            });
-            setIsVideoOff(!isVideoOff);
+    const toggleVideo = async () => {
+        try {
+            console.log('toggleVideo called, isVideoOff:', isVideoOff);
+            console.log('Current localStream tracks:', localStream?.getTracks().map(t => ({ 
+                kind: t.kind, 
+                enabled: t.enabled 
+            })));
+            
+            if (isVideoOff) {
+                // Turn camera ON
+                console.log('Turning camera ON');
+                
+                // Get current audio tracks
+                const audioTracks = localStream ? localStream.getAudioTracks() : [];
+                
+                // Get new video track
+                const videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    }
+                });
+                const videoTrack = videoStream.getVideoTracks()[0];
+                
+                // Create new stream
+                const newStream = new MediaStream();
+                
+                // Add audio tracks if they exist
+                audioTracks.forEach(track => newStream.addTrack(track));
+                
+                // Add video track
+                newStream.addTrack(videoTrack);
+                
+                // Stop the temporary video stream
+                videoStream.getTracks().forEach(track => {
+                    if (track !== videoTrack) track.stop();
+                });
+                
+                console.log('New stream tracks:', newStream.getTracks().map(t => ({ 
+                    kind: t.kind, 
+                    enabled: t.enabled 
+                })));
+                
+                // Set the new stream
+                setLocalStream(newStream);
+                setIsVideoOff(false);
+                
+                // Send updated stream to WebRTC
+                if (sendMessage) {
+                    sendMessage('stream_updated', {
+                        userId,
+                        hasVideo: true
+                    });
+                }
+            } else {
+                // Turn camera OFF
+                console.log('Turning camera OFF');
+                
+                if (localStream) {
+                    // Get current audio tracks
+                    const audioTracks = localStream.getAudioTracks();
+                    
+                    // Stop video tracks
+                    const videoTracks = localStream.getVideoTracks();
+                    videoTracks.forEach(track => track.stop());
+                    
+                    // Create new stream with only audio
+                    const newStream = new MediaStream();
+                    audioTracks.forEach(track => newStream.addTrack(track));
+                    
+                    console.log('New audio-only stream tracks:', newStream.getTracks().map(t => ({ 
+                        kind: t.kind, 
+                        enabled: t.enabled 
+                    })));
+                    
+                    setLocalStream(newStream);
+                    setIsVideoOff(true);
+                    
+                    // Send updated stream to WebRTC
+                    if (sendMessage) {
+                        sendMessage('stream_updated', {
+                            userId,
+                            hasVideo: false
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling video:', error);
+            if (error.name === 'NotAllowedError') {
+                alert('Camera permission denied. Please allow camera access in your browser settings.');
+            } else if (error.name === 'NotFoundError') {
+                alert('No camera found. Please connect a camera and try again.');
+            } else if (error.name === 'NotReadableError') {
+                alert('Camera is already in use by another application.');
+            } else if (error.name === 'OverconstrainedError') {
+                alert('Camera does not support the requested settings.');
+            } else {
+                alert('Could not access camera. Please check permissions and try again.');
+            }
+            
+            // Don't change state if there's an error
+            setIsVideoOff(true);
         }
     };
 
@@ -173,13 +290,20 @@ export default function MeetingRoom() {
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
             sendMessage('user_leave', { userId, user: userName });
             navigate('/');
         }
     };
 
     if (!hasJoined) {
-        return <PreJoinScreen meetingId={meetingId} onJoin={handlePreJoin} />;
+        return <PreJoinScreen 
+            meetingId={meetingId} 
+            onJoin={handlePreJoin} 
+            initialVideoOff={true} // Start with camera off
+        />;
     }
 
     return (
@@ -277,6 +401,8 @@ export default function MeetingRoom() {
                         isMuted={isMuted}
                         userName={userName}
                         viewMode={viewMode}
+                        onToggleVideo={toggleVideo}
+                        onToggleMute={toggleMute}
                     />
                 </div>
 
@@ -304,6 +430,14 @@ export default function MeetingRoom() {
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-white text-sm">{userName} (You)</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        {isVideoOff && (
+                                            <span className="text-xs text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Camera off</span>
+                                        )}
+                                        {isMuted && (
+                                            <span className="text-xs text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Muted</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             {participants.map((participant) => (

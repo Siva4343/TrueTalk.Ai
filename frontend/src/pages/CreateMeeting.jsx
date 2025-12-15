@@ -6,7 +6,7 @@ import { Video, ArrowLeft, Copy, Check, ExternalLink } from 'lucide-react';
 export default function CreateMeeting() {
     const [title, setTitle] = useState('Test Meeting');
     const [description, setDescription] = useState('');
-    const [maxParticipants, setMaxParticipants] = useState(10);
+    const [maxParticipants, setMaxParticipants] = useState(50); // Changed default from 10 to 50
     const [loading, setLoading] = useState(false);
     const [createdMeeting, setCreatedMeeting] = useState(null);
     const [copied, setCopied] = useState(false);
@@ -14,6 +14,13 @@ export default function CreateMeeting() {
 
     const handleCreateMeeting = async (e) => {
         e.preventDefault();
+        
+        // Validate max participants
+        if (maxParticipants < 50 || maxParticipants > 300) {
+            alert('Max participants must be between 50 and 300');
+            return;
+        }
+        
         setLoading(true);
 
         try {
@@ -152,7 +159,7 @@ export default function CreateMeeting() {
                                 setCreatedMeeting(null);
                                 setTitle('Test Meeting');
                                 setDescription('');
-                                setMaxParticipants(10);
+                                setMaxParticipants(50); // Changed from 10 to 50
                             }}
                             className="px-6 py-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-all"
                         >
@@ -253,10 +260,18 @@ export default function CreateMeeting() {
                                 type="number"
                                 value={maxParticipants}
                                 onChange={(e) => setMaxParticipants(e.target.value)}
-                                min="2"
-                                max="50"
+                                min="50"    // Changed from "2" to "50"
+                                max="300"   // Changed from "50" to "300"
                                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-800 transition-all"
                             />
+                            <div className="flex items-center justify-between mt-1">
+                                <span className="text-xs text-gray-500">
+                                    Range: 50-300 participants
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                    Current: {maxParticipants}
+                                </span>
+                            </div>
                         </div>
 
                         {/* Create Button */}
