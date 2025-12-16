@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Reset and base styles */
 *,
 ::before,
@@ -173,3 +177,230 @@ body {
       transparent 100%);
   background-size: 1000px 100%;
 }
+
+/* Floating control bar (Teams-like) */
+:root {
+  --btn-bg: rgba(255,255,255,0.03); /* subtle neutral */
+  --btn-hover: rgba(255,255,255,0.05);
+  --btn-muted: #1f1f1f;
+  --primary-start: #5b5fc7; /* Teams purple */
+  --primary-end: #464775;
+  --danger-start: #e04f4f; /* bright red */
+  --danger-end: #c93b3b;
+  --toggled-start: #7e77d8; /* lighter purple */
+  --toggled-end: #5b5fc7;
+}
+
+.floating-control-bar {
+  background: rgba(23,23,23,0.72);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 8px 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+
+/* Top toolbar bar (md+) */
+.top-toolbar-bar {
+  background: linear-gradient(180deg, rgba(28,28,28,0.92), rgba(20,20,20,0.92));
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 40;
+}
+
+.top-toolbar .control-group {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255,255,255,0.02);
+  padding: 6px;
+  border-radius: 9999px;
+}
+
+.top-toolbar .control-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.top-toolbar .control-btn--danger {
+  width: 96px;
+  height: 44px;
+}
+
+
+.control-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--btn-bg);
+  transition: all 0.16s ease, background 0.12s ease;
+  cursor: pointer;
+}
+
+.control-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  background: var(--btn-hover);
+}
+
+.control-btn-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Primary: confirm/join actions */
+.control-btn--primary {
+  background: linear-gradient(180deg, var(--primary-start), var(--primary-end));
+  width: 92px;
+  height: 44px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 6px 18px rgba(91,95,199,0.12);
+}
+.control-btn--primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+}
+
+/* Danger: destructive (leave) */
+.control-btn--danger {
+  background: linear-gradient(180deg, var(--danger-start), var(--danger-end));
+  width: 96px;
+  height: 44px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 6px 18px rgba(224,79,79,0.12);
+}
+.control-btn--danger:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+/* Toggled state (mic/video on/off, active chat) */
+.control-btn--toggled {
+  background: linear-gradient(180deg, var(--toggled-start), var(--toggled-end));
+  box-shadow: 0 8px 20px rgba(91,95,199,0.16);
+}
+
+/* Ensure default background for control buttons (merged duplicates) */
+.control-btn { background: var(--btn-bg); }
+
+/* Invite button polish */
+.participants-panel .invite-btn {
+  background: linear-gradient(180deg, var(--primary-start), var(--primary-end));
+  color: white;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+
+.control-tooltip {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20,20,20,0.95);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: none;
+  white-space: nowrap;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.control-btn:focus-visible {
+  outline: 2px solid rgba(10,102,194,0.28);
+  outline-offset: 2px;
+}
+
+.control-btn:hover .control-tooltip {
+  display: block;
+}
+
+/* Small screens - shrink controls */
+@media (max-width: 640px) {
+  .floating-control-bar {
+    bottom: 14px;
+    left: 12px;
+    transform: none;
+    right: 12px;
+    border-radius: 12px;
+    padding: 6px;
+    justify-content: space-between;
+  }
+
+  .control-btn--primary {
+    width: 72px;
+  }
+}
+
+/* Focused video tile */
+.scale-102 {
+  transform: scale(1.02);
+}
+
+.shadow-lg {
+  box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+}
+
+/* Header & participants styling */
+.meeting-header {
+  background: linear-gradient(180deg, rgba(40,40,40,0.6), rgba(23,23,23,0.6));
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.top-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.participants-panel {
+  background: linear-gradient(180deg, rgba(30,30,30,0.9), rgba(23,23,23,0.9));
+}
+
+.participant-item {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+}
+
+.participant-item:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.participant-search {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.03);
+  color: #fff;
+}
+
+/* Subtle adjustments to make UI feel more Teams-like */
+.bg-tt-dark {
+  background-color: #121212;
+}
+

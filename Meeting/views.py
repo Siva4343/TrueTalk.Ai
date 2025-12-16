@@ -4,13 +4,11 @@ Complete API implementation for TrueTalk.AI Meeting App
 """
 
 from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Q, Count, Avg
 from django.contrib.auth.hashers import make_password, check_password
@@ -19,6 +17,19 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import jwt
 from datetime import datetime, timedelta
+
+# Try to import django_filters, provide fallback if not available
+import importlib
+try:
+    _mod = importlib.import_module('django_filters.rest_framework')
+    DjangoFilterBackend = getattr(_mod, 'DjangoFilterBackend', object)
+    DJANGO_FILTERS_AVAILABLE = True
+except Exception:
+    DjangoFilterBackend = object
+    DJANGO_FILTERS_AVAILABLE = False
+    print("Warning: django-filter package not installed. Install with: pip install django-filter")
+
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .models import (
     Meeting, MeetingParticipant, ChatMessage,
@@ -42,6 +53,16 @@ from .permissions import (
     IsTeamMember, IsTeamAdmin, IsChannelMember,
     IsOrganizationAdmin, IsOrganizationMember
 )
+
+# Add UserSerializer to serializers.py or define it here
+from rest_framework import serializers
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for User model"""
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active']
+        read_only_fields = ['id', 'is_active']
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -648,11 +669,8 @@ class ReactionViewSet(viewsets.ViewSet):
 
 # Simplified Meeting Endpoints (No Auth Required)
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([permissions.AllowAny])
 def create_meeting_simple(request):
     """Create a new meeting - simplified version"""
     title = request.data.get('title', 'Untitled Meeting')
@@ -679,7 +697,7 @@ def create_meeting_simple(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([permissions.AllowAny])
 def join_meeting_simple(request, meeting_id):
     """Join a meeting - simplified version"""
     try:
@@ -732,10 +750,14 @@ class TeamViewSet(viewsets.ModelViewSet):
     
     queryset = Team.objects.all()
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['organization', 'privacy', 'is_archived']
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'created_at']
+    pagination_class = StandardResultsSetPagination
+    
+    def get_filter_backends(self):
+        """Conditionally include DjangoFilterBackend if available"""
+        backends = [SearchFilter, OrderingFilter]
+        if DJANGO_FILTERS_AVAILABLE:
+            backends.insert(0, DjangoFilterBackend)
+        return backends
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -901,6 +923,7 @@ class TeamViewSet(viewsets.ModelViewSet):
         channels = team.channels.filter(is_archived=False)
         
         # Filter private channels (only show if user is member)
+        from django.db import models
         user_channel_ids = ChannelMembership.objects.filter(
             user=request.user,
             is_active=True
@@ -922,10 +945,14 @@ class ChannelViewSet(viewsets.ModelViewSet):
     
     queryset = Channel.objects.all()
     permission_classes = [permissions.IsAuthenticated, IsChannelMember]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['team', 'channel_type', 'is_archived']
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'created_at']
+    pagination_class = StandardResultsSetPagination
+    
+    def get_filter_backends(self):
+        """Conditionally include DjangoFilterBackend if available"""
+        backends = [SearchFilter, OrderingFilter]
+        if DJANGO_FILTERS_AVAILABLE:
+            backends.insert(0, DjangoFilterBackend)
+        return backends
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -1037,6 +1064,7 @@ class ChannelTabViewSet(viewsets.ModelViewSet):
     queryset = ChannelTab.objects.all()
     serializer_class = ChannelTabSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):
         """Filter tabs for channels user has access to"""
@@ -1059,8 +1087,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     """
     
     queryset = Organization.objects.all()
-    # permission_classes = [permissions.IsAuthenticated] # Already imported permissions
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -1197,6 +1225,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):
         """Users can only see profiles in their organizations"""
@@ -1245,6 +1274,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [permissions.IsAuthenticated, IsOrganizationAdmin]
+    pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):
         """Filter audit logs by organization"""
@@ -1294,8 +1324,11 @@ class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
+        # Get or create user profile
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
         serializer = UserSerializer(request.user)
-        profile_serializer = UserProfileSerializer(request.user.profile)
+        profile_serializer = UserProfileSerializer(profile)
         
         return Response({
             'user': serializer.data,

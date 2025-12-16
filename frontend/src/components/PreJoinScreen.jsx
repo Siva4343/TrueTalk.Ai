@@ -10,14 +10,20 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
   const [previewStream, setPreviewStream] = useState(null);
 
   const videoRef = useRef(null);
+  const previewRef = useRef(null);
+  const initialVideoRef = useRef(videoEnabled);
+  const initialAudioRef = useRef(audioEnabled);
 
   /* ✅ Bind MediaStream to video */
   useEffect(() => {
     if (videoRef.current && previewStream) {
       videoRef.current.srcObject = previewStream;
+      previewRef.current = previewStream;
     }
   }, [previewStream]);
 
+  // Initialize preview stream once on mount (do not re-request on toggle)
+  // Initialize preview stream once on mount (do not re-request on toggle)
   useEffect(() => {
     let active = true;
     let stream;
@@ -25,11 +31,14 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
     const initPreview = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: videoEnabled,
-          audio: audioEnabled,
+          video: initialVideoRef.current,
+          audio: initialAudioRef.current,
         });
 
-        if (active) setPreviewStream(stream);
+        if (active) {
+          setPreviewStream(stream);
+          previewRef.current = stream;
+        }
       } catch (err) {
         console.error(err);
         setError('Camera or microphone permission denied');
@@ -42,7 +51,112 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
       active = false;
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
-  }, [videoEnabled, audioEnabled]);
+  }, []);  // run once on mount
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const s = previewRef.current;
+      if (s) s.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  // Toggle audio without re-requesting whole stream
+  const toggleAudio = async () => {
+    try {
+      const s = previewRef.current;
+      if (s) {
+        const audioTracks = s.getAudioTracks();
+        if (audioTracks.length > 0) {
+          audioTracks.forEach(t => {
+            t.enabled = !audioEnabled;
+          });
+          // create a fresh MediaStream object so the video element picks up changes reliably
+          const newStream = new MediaStream(s.getTracks());
+          previewRef.current = newStream;
+          setPreviewStream(newStream);
+          setAudioEnabled(prev => !prev);
+        } else if (!audioEnabled) {
+          // request audio-only and add track
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const newTrack = audioStream.getAudioTracks()[0];
+          s.addTrack(newTrack);
+          const newStream = new MediaStream(s.getTracks());
+          previewRef.current = newStream;
+          setPreviewStream(newStream);
+          setAudioEnabled(true);
+        }
+      } else {
+        // fallback: create full stream
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: !audioEnabled, video: videoEnabled });
+        setPreviewStream(stream);
+        previewRef.current = stream;
+        setAudioEnabled(prev => !prev);
+      }
+    } catch (err) {
+      console.error('Audio toggle failed:', err);
+      setError('Failed to toggle microphone. Check permissions.');
+    }
+  };
+
+  // Toggle video without re-requesting whole stream
+  const toggleVideo = async () => {
+    try {
+      const s = previewRef.current;
+      if (s) {
+        const videoTracks = s.getVideoTracks();
+        if (videoTracks.length > 0) {
+          // turn off video -> stop and remove tracks
+          videoTracks.forEach(t => {
+            if (typeof t.stop === 'function') {
+              try { t.stop(); } catch (err) { console.warn('Error stopping track', err); }
+            }
+            if (typeof s.removeTrack === 'function') {
+              try { s.removeTrack(t); } catch (err) { console.warn('Error removing track', err); }
+            }
+          });
+
+          // Rebuild preview stream (audio-only)
+          const newStream = new MediaStream(s.getTracks());
+          previewRef.current = newStream;
+          setPreviewStream(newStream);
+          setVideoEnabled(false);
+
+        } else {
+          // request video-only and add track
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const vTrack = videoStream.getVideoTracks()[0];
+          s.addTrack(vTrack);
+
+          // Rebuild preview stream so element detects the new track
+          const newStream = new MediaStream(s.getTracks());
+          previewRef.current = newStream;
+          setPreviewStream(newStream);
+
+          // Force update video element's srcObject and ensure play
+          if (videoRef.current) {
+            try {
+              videoRef.current.srcObject = newStream;
+              await videoRef.current.play().catch(() => {});
+            } catch (err) {
+              console.warn('Could not play video automatically', err);
+            }
+          }
+
+          setVideoEnabled(true);
+        }
+      } else {
+        // fallback: create full stream
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: audioEnabled, video: !videoEnabled });
+        setPreviewStream(stream);
+        previewRef.current = stream;
+        setVideoEnabled(prev => !prev);
+      }
+    } catch (err) {
+      console.error('Video toggle failed:', err);
+      setError('Failed to toggle camera. Check permissions.');
+    }
+  };
 
   const handleJoinMeeting = async () => {
     if (!userName.trim()) {
@@ -66,21 +180,21 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
   };
 
   return (
-    <div className="h-screen bg-gray-900 flex items-center justify-center">
-      <div className="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+    <div className="h-screen bg-tt-dark flex items-center justify-center">
+      <div className="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
 
         {/* LEFT */}
-        <div className="bg-gray-800 rounded-xl p-6">
+        <div className="glass rounded-xl p-6">
           <h2 className="text-white text-xl font-bold mb-4">Meeting Preview</h2>
 
-          <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4">
+          <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 max-h-48 sm:max-h-60 lg:max-h-72">
             {previewStream && videoEnabled ? (
               <video
                 ref={videoRef}
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
@@ -91,27 +205,29 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
 
           <div className="flex justify-center gap-4">
             <button
-              onClick={() => setVideoEnabled(v => !v)}
-              className="bg-gray-700 px-4 py-2 rounded text-white"
+              onClick={toggleVideo}
+              className={`control-btn ${!videoEnabled ? 'control-btn--toggled' : ''}`}
+              title={videoEnabled ? 'Turn off camera' : 'Turn on camera'}
             >
-              {videoEnabled ? <Camera /> : <CameraOff />}
+              {videoEnabled ? <Camera className="control-btn-icon"/> : <CameraOff className="control-btn-icon"/>}
             </button>
 
             <button
-              onClick={() => setAudioEnabled(a => !a)}
-              className="bg-gray-700 px-4 py-2 rounded text-white"
+              onClick={toggleAudio}
+              className={`control-btn ${!audioEnabled ? 'control-btn--toggled' : ''}`}
+              title={audioEnabled ? 'Mute mic' : 'Unmute mic'}
             >
-              {audioEnabled ? <Mic /> : <MicOff />}
+              {audioEnabled ? <Mic className="control-btn-icon"/> : <MicOff className="control-btn-icon"/>}
             </button>
           </div>
         </div>
 
         {/* RIGHT */}
-        <div className="bg-gray-800 rounded-xl p-6">
-          <h1 className="text-white text-2xl font-bold mb-4">Join TrueTalk</h1>
+        <div className="glass rounded-xl p-6">
+          <h1 className="text-white text-2xl font-bold mb-2">Join TrueTalk</h1>
 
           <p className="text-gray-400 mb-2">Meeting ID</p>
-          <div className="bg-gray-900 p-3 rounded mb-4 text-white font-mono">
+          <div className="bg-[#101010] p-3 rounded mb-4 text-white font-mono">
             {meetingId}
           </div>
 
@@ -119,7 +235,7 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
             value={userName}
             onChange={e => setUserName(e.target.value)}
             placeholder="Your Name"
-            className="w-full p-3 rounded bg-gray-900 text-white mb-4"
+            className="participant-search mb-4"
           />
 
           {error && (
@@ -131,7 +247,7 @@ export default function PreJoinScreen({ meetingId, onJoin }) {
           <button
             disabled={!userName || isLoading}
             onClick={handleJoinMeeting}
-            className="w-full py-3 rounded bg-blue-600 text-white font-semibold"
+            className="w-full py-3 rounded control-btn--primary text-white font-semibold"
           >
             {isLoading ? 'Joining...' : 'Join Meeting'}
           </button>

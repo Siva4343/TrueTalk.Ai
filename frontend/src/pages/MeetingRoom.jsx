@@ -4,10 +4,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
 import VideoGrid from '../components/VideoGrid';
-import ControlBar from '../components/ControlBar';
 import ChatSidebar from '../components/ChatSidebar';
 import PreJoinScreen from '../components/PreJoinScreen';
-import { Users, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal, Volume2, VolumeX } from 'lucide-react';
+import ParticipantsSidebar from '../components/participantsSidebar';
+import ControlBar from '../components/ControlBar';
+import { Users, Copy, Check, Grid3x3, LayoutGrid, MoreHorizontal, MoreVertical, Volume2, VolumeX } from 'lucide-react';
+import TopToolbar from '../components/TopToolbar';
+import { meetingAPI } from '../services/api';
 
 // Simple counter for user IDs (defined outside component to persist)
 let userIdCounter = 0;
@@ -31,14 +34,13 @@ export default function MeetingRoom() {
     const [screenStream, setScreenStream] = useState(null);
     const [showChat, setShowChat] = useState(false);
     const [showParticipants, setShowParticipants] = useState(false);
-    const [viewMode, setViewMode] = useState('grid');
+    const [viewMode, _setViewMode] = useState('grid');
     const [chatMessages, setChatMessages] = useState([]);
     const [participants, setParticipants] = useState([]);
     const [copied, setCopied] = useState(false);
     const [reactions, setReactions] = useState([]);
     const [reactionPositions, setReactionPositions] = useState({});
     const [showMoreOptions, setShowMoreOptions] = useState(false);
-    const [debugMode, setDebugMode] = useState(false);
 
     const moreOptionsRef = useRef(null);
     const audioTrackRef = useRef(null);
@@ -64,17 +66,7 @@ export default function MeetingRoom() {
         }, 3000);
     }, []);
 
-    // Debug useEffect to track mute state
-    useEffect(() => {
-        console.log('🔊 DEBUG Mute State:', {
-            isMuted,
-            hasLocalStream: !!localStream,
-            audioTracks: localStream?.getAudioTracks()?.length || 0,
-            audioTrackEnabled: localStream?.getAudioTracks()[0]?.enabled,
-            audioTrackRef: audioTrackRef.current?.enabled
-        });
-    }, [isMuted, localStream]);
-
+    // (Debug logs removed in production UI)
     // Store audio track reference when localStream changes
     useEffect(() => {
         if (localStream) {
@@ -107,7 +99,7 @@ export default function MeetingRoom() {
             handleUserJoined(data);
             setParticipants(prev => {
                 if (prev.find(p => p.id === data.userId)) return prev;
-                return [...prev, { id: data.userId, name: data.user }];
+                return [...prev, { id: data.userId, name: data.user, isMuted: data.isMuted ?? false }];
             });
         });
 
@@ -344,40 +336,7 @@ export default function MeetingRoom() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Test microphone function
-    const testMicrophone = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const track = stream.getAudioTracks()[0];
-            console.log('🎤 Microphone test - Track enabled:', track.enabled);
-            
-            // Play a test sound
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.frequency.value = 440;
-            oscillator.type = 'sine';
-            gainNode.gain.value = 0.1;
-            
-            oscillator.start();
-            setTimeout(() => {
-                oscillator.stop();
-                audioContext.close();
-            }, 500);
-            
-            stream.getTracks().forEach(t => t.stop());
-            
-            alert('Microphone test complete! Check console for details.');
-            
-        } catch (error) {
-            console.error('❌ Microphone test failed:', error);
-            alert('Microphone access denied or failed. Check browser permissions.');
-        }
-    };
+    /* Microphone test helper removed (debug-only) */
 
     const handleLeave = () => {
         if (confirm('Are you sure you want to leave?')) {
@@ -434,40 +393,40 @@ export default function MeetingRoom() {
         }
     };
 
-    // Reset audio function
-    const resetAudio = async () => {
-        if (confirm('Reset audio? This will reinitialize your microphone.')) {
-            try {
-                // Stop current audio
-                if (localStream) {
-                    const audioTracks = localStream.getAudioTracks();
-                    audioTracks.forEach(track => track.stop());
-                }
-                
-                // Get new audio
-                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const newAudioTrack = audioStream.getAudioTracks()[0];
-                
-                // Get current video if any
-                const videoTracks = localStream ? localStream.getVideoTracks() : [];
-                
-                // Create new stream
-                const newStream = new MediaStream();
-                newStream.addTrack(newAudioTrack);
-                videoTracks.forEach(track => newStream.addTrack(track));
-                
-                // Update ref and state
-                audioTrackRef.current = newAudioTrack;
-                setLocalStream(newStream);
-                setIsMuted(false);
-                
-                console.log('🔄 Audio reset complete');
-                alert('Audio reset successfully!');
-                
-            } catch (error) {
-                console.error('❌ Audio reset failed:', error);
-                alert('Failed to reset audio. Check microphone permissions.');
-            }
+    /* Audio reset helper removed (debug-only) */
+
+    // Participant moderation handlers
+    const handleMuteParticipant = async (participantId) => {
+        try {
+            await meetingAPI.muteParticipant(meetingId, participantId);
+            setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, isMuted: true } : p));
+            // Notify other participants via websocket
+            sendMessage('participant_muted', { participantId });
+        } catch (err) {
+            console.error('Mute failed:', err);
+            alert('Could not mute participant');
+        }
+    };
+
+    const handleRemoveParticipant = async (participantId) => {
+        try {
+            await meetingAPI.removeParticipant(meetingId, participantId);
+            setParticipants(prev => prev.filter(p => p.id !== participantId));
+            sendMessage('participant_removed', { participantId });
+        } catch (err) {
+            console.error('Remove failed:', err);
+            alert('Could not remove participant');
+        }
+    };
+
+    const handleMakeCohost = async (participantId) => {
+        try {
+            await meetingAPI.makeCohost(meetingId, participantId);
+            setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, role: 'co_host' } : p));
+            alert('Participant promoted to co-host');
+        } catch (err) {
+            console.error('Make cohost failed:', err);
+            alert('Could not promote participant');
         }
     };
 
@@ -478,92 +437,46 @@ export default function MeetingRoom() {
     return (
         <div className="h-screen bg-[#1f1f1f] flex flex-col relative overflow-hidden">
             {/* Header */}
-            <div className="bg-[#292929] border-b border-[#3d3d3d] px-4 py-2 flex items-center justify-between">
+            <div className="meeting-header px-4 py-2 flex items-center justify-between">
+                {/* Header: use TopToolbar for title and controls (keeps UI minimal like Teams) */}
                 <div className="flex items-center gap-3">
-                    <div className="text-white">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-sm font-semibold">TrueTalk Meeting</h1>
-                            {isConnected ? (
-                                <div className="flex items-center gap-1 text-xs text-green-400">
-                                    <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                                    <span>Connected</span>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-1 text-xs text-yellow-400">
-                                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
-                                    <span>Connecting...</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    {/* Meeting title & status moved to TopToolbar to avoid duplication */}
                 </div>
 
                 <div className="flex items-center gap-2">
                     {/* Debug buttons - only show in debug mode */}
-                    <button
-                        onClick={() => setDebugMode(!debugMode)}
-                        className="px-2 py-1 text-xs bg-gray-700 text-white rounded"
-                    >
-                        {debugMode ? 'Hide Debug' : 'Debug'}
-                    </button>
-                    
-                    {debugMode && (
-                        <>
-                            <button
-                                onClick={testMicrophone}
-                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-md transition-all text-white text-sm flex items-center gap-2"
-                            >
-                                <Volume2 className="w-4 h-4" />
-                                Test Mic
-                            </button>
-                            
-                            <button
-                                onClick={resetAudio}
-                                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 rounded-md transition-all text-white text-sm"
-                            >
-                                Reset Audio
-                            </button>
-                            
-                            <button
-                                onClick={() => console.log('Audio track ref:', audioTrackRef.current)}
-                                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 rounded-md transition-all text-white text-sm"
-                            >
-                                Log Audio
-                            </button>
-                        </>
-                    )}
+                    {/* Top toolbar (visible on md+) - simplified */}
+                    <TopToolbar
+                        title={meetingId || 'TrueTalk Meeting'}
+                        isMuted={isMuted}
+                        isVideoOff={isVideoOff}
+                        isScreenSharing={isScreenSharing}
+                        onToggleMute={toggleMute}
+                        onToggleVideo={toggleVideo}
+                        onToggleScreenShare={toggleScreenShare}
+                        onToggleChat={() => setShowChat(!showChat)}
+                        onToggleParticipants={() => setShowParticipants(!showParticipants)}
+                        onLeave={handleLeave}
+                        onSendReaction={handleSendReaction}
+                        showChat={showChat}
+                        showParticipants={showParticipants}
+                    />
 
-                    {/* View Mode Toggle */}
-                    <div className="flex bg-[#3d3d3d] rounded-md p-1">
-                        <button
-                            onClick={() => setViewMode('grid')}
-                            className={`p-1.5 rounded transition-all ${viewMode === 'grid'
-                                ? 'bg-[#5b5fc7] text-white'
-                                : 'text-gray-400 hover:text-white'
-                                }`}
-                            title="Grid view"
-                        >
-                            <Grid3x3 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setViewMode('gallery')}
-                            className={`p-1.5 rounded transition-all ${viewMode === 'gallery'
-                                ? 'bg-[#5b5fc7] text-white'
-                                : 'text-gray-400 hover:text-white'
-                                }`}
-                            title="Gallery view"
-                        >
-                            <LayoutGrid className="w-4 h-4" />
-                        </button>
-                    </div>
+                    {/* (Removed Debug and View Mode buttons for cleaner header) */}
 
                     {/* Participant count */}
                     <button
                         onClick={() => setShowParticipants(!showParticipants)}
                         className="flex items-center gap-2 px-3 py-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d] rounded-md transition-all text-white text-sm"
+                        title="Participants"
                     >
-                        <Users className="w-4 h-4" />
-                        <span>{remoteStreams.size + 1}</span>
+                        <div className="flex -space-x-2">
+                            <div className="w-6 h-6 rounded-full bg-[#5b5fc7] flex items-center justify-center text-white text-xs font-semibold">{userName.charAt(0).toUpperCase()}</div>
+                            {participants.slice(0,2).map((p)=> (
+                                <div key={p.id} className="w-6 h-6 rounded-full bg-[#6264a7] flex items-center justify-center text-white text-xs font-semibold">{p.name.charAt(0).toUpperCase()}</div>
+                            ))}
+                        </div>
+                        <span className="ml-2">{remoteStreams.size + 1}</span>
                     </button>
 
                     {/* Copy link */}
@@ -658,47 +571,16 @@ export default function MeetingRoom() {
 
                 {/* Participants Panel */}
                 {showParticipants && (
-                    <div className="w-80 bg-[#292929] border-l border-[#3d3d3d] flex flex-col">
-                        <div className="p-4 border-b border-[#3d3d3d]">
-                            <h2 className="font-semibold text-white text-sm">Participants ({participants.length + 1})</h2>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-                            <div className="flex items-center gap-3 p-2 hover:bg-[#3d3d3d] rounded transition-all">
-                                <div className="w-8 h-8 bg-[#5b5fc7] rounded-full flex items-center justify-center">
-                                    <span className="text-white text-sm font-semibold">{userName.charAt(0).toUpperCase()}</span>
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-white text-sm">{userName} (You)</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        {isVideoOff && (
-                                            <span className="text-xs text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Camera off</span>
-                                        )}
-                                        {isMuted ? (
-                                            <span className="text-xs text-red-400 bg-black/30 px-1.5 py-0.5 rounded">
-                                                <VolumeX className="w-3 h-3 inline mr-1" />
-                                                Muted
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs text-green-400 bg-black/30 px-1.5 py-0.5 rounded">
-                                                <Volume2 className="w-3 h-3 inline mr-1" />
-                                                Unmuted
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                            {participants.map((participant) => (
-                                <div key={participant.id} className="flex items-center gap-3 p-2 hover:bg-[#3d3d3d] rounded transition-all">
-                                    <div className="w-8 h-8 bg-[#6264a7] rounded-full flex items-center justify-center">
-                                        <span className="text-white text-sm font-semibold">{participant.name.charAt(0).toUpperCase()}</span>
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-white text-sm">{participant.name}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <ParticipantsSidebar
+                        participants={participants}
+                        currentUser={{ id: userId, name: userName }}
+                        onClose={() => setShowParticipants(false)}
+                        onPinParticipant={(id) => console.log('Pin', id)}
+                        pinnedParticipant={null}
+                        onMuteParticipant={handleMuteParticipant}
+                        onRemoveParticipant={handleRemoveParticipant}
+                        onMakeCohost={handleMakeCohost}
+                    />
                 )}
             </div>
 
@@ -717,7 +599,7 @@ export default function MeetingRoom() {
                 ))}
             </div>
 
-            {/* Control Bar */}
+            {/* Mobile Floating Control Bar (visible only on small screens) */}
             <div className="relative z-10">
                 <ControlBar
                     isMuted={isMuted}
@@ -734,6 +616,8 @@ export default function MeetingRoom() {
                     showParticipants={showParticipants}
                 />
             </div>
+
+
         </div>
     );
 }

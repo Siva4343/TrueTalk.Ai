@@ -32,76 +32,55 @@ function ControlBar({
     };
 
     return (
-        <div className="bg-[#292929] border-t border-[#3d3d3d] px-4 py-3">
-            <div className="flex items-center justify-center gap-2">
-                {/* Mute Button - SIMPLIFIED AND CORRECT */}
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-30 md:hidden">
+            <div className="floating-control-bar glass flex items-center justify-center gap-3 px-4 py-3 rounded-full shadow-lg">
+                {/* Mute Button */}
                 <button
                     onClick={onToggleMute}
-                    className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isMuted
-                        ? 'bg-[#c4314b] hover:bg-[#a92b40]'
-                        : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
-                        }`}
-                    title={isMuted ? 'Click to unmute' : 'Click to mute'}
+                    className={`control-btn ${isMuted ? 'control-btn--toggled' : ''}`}
+                    aria-pressed={isMuted}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                    {/* Icon changes based on isMuted */}
-                    {isMuted ? (
-                        <>
-                            <MicOff className="w-5 h-5 text-white" />
-                            <span className="text-xs text-white">Unmute</span>
-                        </>
-                    ) : (
-                        <>
-                            <Mic className="w-5 h-5 text-white" />
-                            <span className="text-xs text-white">Mute</span>
-                        </>
-                    )}
+                    {isMuted ? <MicOff className="control-btn-icon" /> : <Mic className="control-btn-icon" />}
+                    <span className="control-tooltip">{isMuted ? 'Unmute' : 'Mute'}</span>
                 </button>
 
                 {/* Video Button */}
                 <button
                     onClick={onToggleVideo}
-                    className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isVideoOff
-                        ? 'bg-[#c4314b] hover:bg-[#a92b40]'
-                        : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
-                        }`}
+                    className={`control-btn ${isVideoOff ? 'control-btn--toggled' : ''}`}
+                    aria-pressed={isVideoOff}
+                    aria-label={isVideoOff ? 'Turn camera on' : 'Turn camera off'}
+                    title={isVideoOff ? 'Turn camera on' : 'Turn camera off'}
                 >
-                    {isVideoOff ? (
-                        <>
-                            <VideoOff className="w-5 h-5 text-white" />
-                            <span className="text-xs text-white">Camera Off</span>
-                        </>
-                    ) : (
-                        <>
-                            <Video className="w-5 h-5 text-white" />
-                            <span className="text-xs text-white">Camera On</span>
-                        </>
-                    )}
+                    {isVideoOff ? <VideoOff className="control-btn-icon" /> : <Video className="control-btn-icon" />}
+                    <span className="control-tooltip">{isVideoOff ? 'Camera Off' : 'Camera On'}</span>
                 </button>
 
                 {/* Screen Share Button */}
                 <button
                     onClick={onToggleScreenShare}
-                    className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${isScreenSharing
-                        ? 'bg-[#5b5fc7] hover:bg-[#4d52b8]'
-                        : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
-                        }`}
+                    className={`control-btn ${isScreenSharing ? 'control-btn--toggled' : ''}`}
+                    aria-pressed={isScreenSharing}
+                    aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                    title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
                 >
-                    {isScreenSharing ? (
-                        <MonitorOff className="w-5 h-5 text-white" />
-                    ) : (
-                        <Monitor className="w-5 h-5 text-white" />
-                    )}
-                    <span className="text-xs text-white">{isScreenSharing ? 'Stop' : 'Share'}</span>
+                    {isScreenSharing ? <MonitorOff className="control-btn-icon" /> : <Monitor className="control-btn-icon" />}
+                    <span className="control-tooltip">{isScreenSharing ? 'Stop' : 'Share'}</span>
                 </button>
 
                 {/* Reactions Button */}
                 <div className="relative">
                     <button
                         onClick={() => setShowReactions(!showReactions)}
-                        className="group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md bg-[#3d3d3d] hover:bg-[#4d4d4d] transition-all"
+                        className={`control-btn ${showReactions ? 'control-btn--toggled' : ''}`}
+                        aria-pressed={showReactions}
+                        aria-label="Reactions"
+                        title="Reactions"
                     >
-                        <Smile className="w-5 h-5 text-white" />
-                        <span className="text-xs text-white">React</span>
+                        <Smile className="control-btn-icon" />
+                        <span className="control-tooltip">React</span>
                     </button>
 
                     {/* Reactions Popup */}
@@ -126,40 +105,42 @@ function ControlBar({
                 {/* Chat Button */}
                 <button
                     onClick={onToggleChat}
-                    className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${showChat
-                        ? 'bg-[#5b5fc7] hover:bg-[#4d52b8]'
-                        : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
-                        }`}
+                    className={`control-btn ${showChat ? 'control-btn--toggled' : ''}`}
+                    aria-pressed={showChat}
+                    aria-label="Toggle chat"
+                    title="Chat"
                 >
-                    <MessageSquare className="w-5 h-5 text-white" />
-                    <span className="text-xs text-white">Chat</span>
+                    <MessageSquare className="control-btn-icon" />
+                    <span className="control-tooltip">Chat</span>
                 </button>
 
                 {/* Participants Button */}
                 <button
                     onClick={onToggleParticipants}
-                    className={`group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md transition-all ${showParticipants
-                        ? 'bg-[#5b5fc7] hover:bg-[#4d52b8]'
-                        : 'bg-[#3d3d3d] hover:bg-[#4d4d4d]'
-                        }`}
+                    className={`control-btn ${showParticipants ? 'control-btn--toggled' : ''}`}
+                    aria-pressed={showParticipants}
+                    aria-label="Toggle participants"
+                    title="Participants"
                 >
-                    <Users className="w-5 h-5 text-white" />
-                    <span className="text-xs text-white">People</span>
+                    <Users className="control-btn-icon" />
+                    <span className="control-tooltip">People</span>
                 </button>
 
-                {/* More Options */}
-                <button className="group relative flex flex-col items-center gap-1 px-4 py-2 rounded-md bg-[#3d3d3d] hover:bg-[#4d4d4d] transition-all">
-                    <MoreHorizontal className="w-5 h-5 text-white" />
-                    <span className="text-xs text-white">More</span>
-                </button>
+                {/* More Options - You might want to remove this if it doesn't have functionality */}
+                {/* <button className="control-btn bg-[#2f2f2f] hover:bg-[#3f3f3f]" aria-label="More options" title="More">
+                    <MoreHorizontal className="control-btn-icon" />
+                    <span className="control-tooltip">More</span>
+                </button> */}
 
                 {/* Leave Button */}
                 <button
                     onClick={onLeave}
-                    className="group relative flex flex-col items-center gap-1 px-6 py-2 rounded-md bg-[#c4314b] hover:bg-[#a92b40] transition-all ml-4"
+                    className="control-btn control-btn--danger ml-4"
+                    aria-label="Leave meeting"
+                    title="Leave"
                 >
-                    <PhoneOff className="w-5 h-5 text-white" />
-                    <span className="text-xs text-white font-semibold">Leave</span>
+                    <PhoneOff className="control-btn-icon" />
+                    <span className="ml-2 font-semibold">Leave</span>
                 </button>
             </div>
         </div>

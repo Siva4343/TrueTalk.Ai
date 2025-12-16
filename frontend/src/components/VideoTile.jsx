@@ -7,7 +7,9 @@ export default function VideoTile({
     isLocal, 
     isMuted, 
     isVideoOff, 
-    name 
+    name,
+    isFocused = false,
+    onClick = () => {}
 }) {
     const videoRef = useRef(null);
 
@@ -23,7 +25,10 @@ export default function VideoTile({
     const shouldShowVideo = !isVideoOff && hasVideoTracks;
 
     return (
-        <div className="relative h-full bg-[#1a1a1a] rounded-lg overflow-hidden border-2 border-[#2d2d2d] hover:border-[#464775] transition-colors">
+        <div
+            onClick={onClick}
+            className={`relative h-full bg-[#1a1a1a] rounded-lg overflow-hidden border-2 transition-all ${isFocused ? 'border-[#5b5fc7] scale-102 shadow-lg transform' : 'border-[#2d2d2d] hover:border-[#464775]'} cursor-pointer`}
+        >
             {/* Video element - show only if video is enabled AND stream has video tracks */}
             {shouldShowVideo ? (
                 <video
@@ -31,7 +36,7 @@ export default function VideoTile({
                     autoPlay
                     playsInline
                     muted={isLocal}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full max-h-full max-w-full ${isLocal || isFocused ? 'object-contain' : 'object-cover'}`}
                 />
             ) : (
                 <div className="w-full h-full flex items-center justify-center bg-[#2d2d2d]">

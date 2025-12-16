@@ -6,9 +6,13 @@ export default function ParticipantsSidebar({
     currentUser,
     onClose,
     onPinParticipant,
-    pinnedParticipant
+    pinnedParticipant,
+    onMuteParticipant,
+    onRemoveParticipant,
+    onMakeCohost
 }) {
     const [searchTerm, setSearchTerm] = useState('');
+    const [openMenuId, setOpenMenuId] = useState(null);
 
     const allParticipants = [
         { 
@@ -79,6 +83,9 @@ export default function ParticipantsSidebar({
                                     <p className="text-white text-sm font-medium truncate">
                                         {participant.name}
                                     </p>
+                                    {participant.role && (
+                                        <span className="text-xs bg-[#2b2b2b] text-gray-300 px-2 py-0.5 rounded ml-2">{participant.role.replace('_', ' ')}</span>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <div className="flex items-center gap-1">
@@ -100,9 +107,38 @@ export default function ParticipantsSidebar({
                             >
                                 <Pin className="w-4 h-4" />
                             </button>
-                            <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d]">
-                                <MoreVertical className="w-4 h-4" />
-                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setOpenMenuId(openMenuId === participant.id ? null : participant.id)}
+                                    className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d]"
+                                    title="More"
+                                >
+                                    <MoreVertical className="w-4 h-4" />
+                                </button>
+
+                                {openMenuId === participant.id && (
+                                    <div className="absolute right-0 top-full mt-2 w-44 bg-[#1f1f1f] border border-[#3d3d3d] rounded shadow-lg z-50 py-1">
+                                        <button
+                                            onClick={() => { setOpenMenuId(null); onMuteParticipant && onMuteParticipant(participant.id); }}
+                                            className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#2b2b2b]"
+                                        >
+                                            Mute
+                                        </button>
+                                        <button
+                                            onClick={() => { setOpenMenuId(null); if (confirm('Remove participant from meeting?')) { onRemoveParticipant && onRemoveParticipant(participant.id); } }}
+                                            className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#2b2b2b]"
+                                        >
+                                            Remove
+                                        </button>
+                                        <button
+                                            onClick={() => { setOpenMenuId(null); onMakeCohost && onMakeCohost(participant.id); }}
+                                            className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#2b2b2b]"
+                                        >
+                                            Make co-host
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -110,7 +146,7 @@ export default function ParticipantsSidebar({
 
             {/* Footer */}
             <div className="p-4 border-t border-[#3d3d3d] bg-[#1e1e1e]">
-                <button className="w-full py-2 px-4 bg-[#5b5fc7] hover:bg-[#4d52b8] text-white text-sm font-medium rounded transition-all">
+                <button className="w-full py-2 px-4 invite-btn hover:brightness-105 text-white text-sm font-medium rounded transition-all">
                     Invite people
                 </button>
             </div>
